@@ -93,4 +93,46 @@ C との FFI は、C 側からインタプリタのコンストラクタを呼�
 
 よし、まあさっさと lexer を書いちゃいますか。
 
+（2時間後）
+
+変に idiomatic じゃない方法で lexer 書いたら 2 時間溶けた。`split_once` とほぼ同等だけどデリミタを消さないで残しておいてくれるやつ、つまり
+
+```rust
+    pub fn split_once<'a, P: Pattern<'a>>(&'a self, delimiter: P) -> Option<(&'a str, &'a str)> {
+        let (start, end) = delimiter.into_searcher(self).next_match()?;
+        // SAFETY: `Searcher` is known to return valid indices.
+        unsafe { Some((self.get_unchecked(..start), self.get_unchecked(end..))) }
+    }
+```
+
+の代わりに
+
+```rust
+    pub fn split_once_but_keep_the_delimiter<'a, P: Pattern<'a>>(&'a self, delimiter: P) -> Option<(&'a str, &'a str)> {
+        let (start, _end) = delimiter.into_searcher(self).next_match()?;
+        // SAFETY: `Searcher` is known to return valid indices.
+        unsafe { Some((self.get_unchecked(..start), self.get_unchecked(start..))) }
+    }
+```
+
+が欲しいという気持ちになった。これがないせいで、
+
+```rust
+match input.chars().next() {
+	None => (None, input),
+	Some('a'..='z' | 'A'..='Z' | '_') => {
+		let ident: String = input
+			.chars()
+			.take_while(|c| matches!(c, 'a'..='z' | 'A'..='Z' | '_' | '0'..='9'))
+			.collect();
+		let rest = input.trim_start_matches(
+			|c| matches!(c, 'a'..='z' | 'A'..='Z' | '_' | '0'..='9'),
+		);
+		(Some(Token::Identifier(ident)), rest)
+	}
+	...
+}
+```
+
+とか書くはめになっている。いやまあ素直に nom を使えという話なんだよな。
 
