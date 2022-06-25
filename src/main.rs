@@ -4,6 +4,7 @@ fn main() {
 
 #[test]
 fn test1() {
+    use lex::Token::*;
     let src = r#"for (i = 1; i <= 100; i = i + 1) {
 	if (i % 15 == 0) {
 		print("FizzBuzz\n");
@@ -15,7 +16,86 @@ fn test1() {
 		print("" + i + "\n");
 	}
 }"#;
-    lex::lex(src);
+    assert_eq!(
+        lex::lex(src),
+        vec![
+            Identifier("for".to_string()),
+            LeftParen,
+            Identifier("i".to_string()),
+            Assign,
+            IntLiteral(1),
+            Semicolon,
+            Identifier("i".to_string()),
+            LessThanOrEqual,
+            IntLiteral(100),
+            Semicolon,
+            Identifier("i".to_string()),
+            Assign,
+            Identifier("i".to_string()),
+            Add,
+            IntLiteral(1),
+            RightParen,
+            LeftCurly,
+            Identifier("if".to_string()),
+            LeftParen,
+            Identifier("i".to_string()),
+            Mod,
+            IntLiteral(15),
+            Equal,
+            IntLiteral(0),
+            RightParen,
+            LeftCurly,
+            Identifier("print".to_string()),
+            LeftParen,
+            StringLiteral("FizzBuzz\n".to_string()),
+            RightParen,
+            Semicolon,
+            RightCurly,
+            Identifier("elsif".to_string()),
+            LeftParen,
+            Identifier("i".to_string()),
+            Mod,
+            IntLiteral(3),
+            Equal,
+            IntLiteral(0),
+            RightParen,
+            LeftCurly,
+            Identifier("print".to_string()),
+            LeftParen,
+            StringLiteral("Fizz\n".to_string()),
+            RightParen,
+            Semicolon,
+            RightCurly,
+            Identifier("elsif".to_string()),
+            LeftParen,
+            Identifier("i".to_string()),
+            Mod,
+            IntLiteral(5),
+            Equal,
+            IntLiteral(0),
+            RightParen,
+            LeftCurly,
+            Identifier("print".to_string()),
+            LeftParen,
+            StringLiteral("Buzz\n".to_string()),
+            RightParen,
+            Semicolon,
+            RightCurly,
+            Identifier("else".to_string()),
+            LeftCurly,
+            Identifier("print".to_string()),
+            LeftParen,
+            StringLiteral("".to_string()),
+            Add,
+            Identifier("i".to_string()),
+            Add,
+            StringLiteral("\n".to_string()),
+            RightParen,
+            Semicolon,
+            RightCurly,
+            RightCurly
+        ]
+    );
 }
 
 pub mod lex;
