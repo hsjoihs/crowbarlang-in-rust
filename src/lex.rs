@@ -216,9 +216,29 @@ pub fn lex(input: &str) -> Vec<Token> {
     let mut state = LexerState::new();
     let mut rest = input;
 
-    while let (Some(token), rest2) = state.get_token_raw(rest) {
-        ans.push(token);
+    'outer: while let (Some(token), rest2) = state.get_token_raw(rest) {
         rest = rest2;
+        for (reserved_str, reserved_token) in &[
+            ("function", Token::Function),
+            ("if", Token::If),
+            ("else", Token::Else),
+            ("elsif", Token::Elsif),
+            ("while", Token::While),
+            ("for", Token::For),
+            ("return", Token::ReturnT),
+            ("break", Token::Break),
+            ("continue", Token::Continue),
+            ("null", Token::NullT),
+            ("true", Token::TrueT),
+            ("false", Token::FalseT),
+            ("global", Token::GlobalT),
+        ] {
+            if token == Token::Identifier(reserved_str.to_string()) {
+                ans.push(reserved_token.clone());
+                continue 'outer;
+            }
+        }
+        ans.push(token);
     }
     ans
 }
