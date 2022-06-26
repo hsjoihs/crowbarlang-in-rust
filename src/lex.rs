@@ -73,14 +73,6 @@ struct LexerState {
     line_number: usize,
 }
 
-macro_rules! try_strip_and_return {
-    ($input: expr, $prefix: expr, $token: expr) => {
-        if let Some(rest) = $input.strip_prefix($prefix) {
-            return (Some($token), rest);
-        }
-    };
-}
-
 #[test]
 fn test_get_token_raw() {
     assert_eq!(
@@ -186,29 +178,34 @@ impl LexerState {
                             return self.get_token_raw(rest);
                         }
 
-                        try_strip_and_return!(input, '(', Token::LeftParen);
-                        try_strip_and_return!(input, ')', Token::RightParen);
-                        try_strip_and_return!(input, '{', Token::LeftCurly);
-                        try_strip_and_return!(input, '}', Token::RightCurly);
-                        try_strip_and_return!(input, ';', Token::Semicolon);
-                        try_strip_and_return!(input, ',', Token::Comma);
-                        try_strip_and_return!(input, "&&", Token::LogicalAnd);
-                        try_strip_and_return!(input, "||", Token::LogicalOr);
-                        // Must look for == earlier than we look for =
-                        try_strip_and_return!(input, "==", Token::Equal);
-                        try_strip_and_return!(input, ">=", Token::GreaterThanOrEqual);
-                        try_strip_and_return!(input, "<=", Token::LessThanOrEqual);
-                        try_strip_and_return!(input, "!=", Token::NotEqual);
-                        try_strip_and_return!(input, '>', Token::GreaterThan);
-                        try_strip_and_return!(input, '<', Token::LessThan);
-                        try_strip_and_return!(input, '=', Token::Assign);
-                        try_strip_and_return!(input, '>', Token::GreaterThan);
-                        try_strip_and_return!(input, '+', Token::Add);
-                        try_strip_and_return!(input, '-', Token::Sub);
-                        try_strip_and_return!(input, '*', Token::Mul);
-                        try_strip_and_return!(input, '/', Token::Div);
-                        try_strip_and_return!(input, '%', Token::Mod);
-
+                        for (prefix, token) in [
+                            ("(", Token::LeftParen),
+                            (")", Token::RightParen),
+                            ("{", Token::LeftCurly),
+                            ("}", Token::RightCurly),
+                            (";", Token::Semicolon),
+                            (",", Token::Comma),
+                            ("&&", Token::LogicalAnd),
+                            ("||", Token::LogicalOr),
+                            // Must look for == earlier than we look for =
+                            ("==", Token::Equal),
+                            (">=", Token::GreaterThanOrEqual),
+                            ("<=", Token::LessThanOrEqual),
+                            ("!=", Token::NotEqual),
+                            (">", Token::GreaterThan),
+                            ("<", Token::LessThan),
+                            ("=", Token::Assign),
+                            (">", Token::GreaterThan),
+                            ("+", Token::Add),
+                            ("-", Token::Sub),
+                            ("*", Token::Mul),
+                            ("/", Token::Div),
+                            ("%", Token::Mod),
+                        ] {
+                            if let Some(rest) = input.strip_prefix(prefix) {
+                                return (Some(token), rest);
+                            }
+                        }
                         panic!(
                             "Invalid character `{}` found at line `{}`.",
                             c, self.line_number

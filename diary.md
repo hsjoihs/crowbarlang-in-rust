@@ -211,3 +211,5 @@ FizzBuzz の構文木を手で書いて、ちゃんと期待するのと一致�
 あ、 rust-analyzer 拡張の方だと clippy のが VSCode 上で見えないのか。じゃあ rust 拡張の方に戻して、適用していく。
 
 あー、 lexer の cognitive complexity が高いと言われた。まあねぇ。
+
+マクロにするのをやめて for 文にしたら普通に通った。
