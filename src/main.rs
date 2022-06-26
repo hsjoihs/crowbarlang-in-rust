@@ -1,11 +1,10 @@
-use crate::lex::Ident;
-
 fn main() {
     println!("Hello, world!");
 }
 
 #[test]
 fn test1() {
+    use lex::Ident;
     use lex::Token::*;
     let src = r#"for (i = 1; i <= 100; i = i + 1) {
 	if (i % 15 == 0) {
@@ -18,8 +17,9 @@ fn test1() {
 		print("" + i + "\n");
 	}
 }"#;
+    let lexed = lex::lex(src);
     assert_eq!(
-        lex::lex(src),
+        lexed,
         vec![
             For,
             LeftParen,
@@ -101,7 +101,35 @@ fn test1() {
 }
 
 #[test]
+fn test3() {
+    use lex::Ident;
+    use parse::Expr::*;
+    use parse::Statement::*;
+    let src = r#"for (i = 1; i <= 100; i = i + 1) {
+}"#;
+    let lexed = lex::lex(src);
+    let parsed = parse::parse_statements(&lexed);
+
+    assert_eq!(
+        parsed,
+        vec![For(
+            Some(Assign(Ident::from("i"), Box::new(IntLiteral(1)))),
+            Some(LessThanOrEqual(
+                Box::new(Identifier(Ident::from("i"))),
+                Box::new(IntLiteral(100))
+            )),
+            Some(Assign(
+                Ident::from("i"),
+                Box::new(Add(Box::new(Identifier(Ident::from("i"))), Box::new(IntLiteral(1))))
+            )),
+            parse::Block(vec![])
+        )]
+    )
+}
+
+#[test]
 fn test2() {
+    use lex::Ident;
     use lex::Token::*;
     let src = r##"
 a = 10;

@@ -106,7 +106,7 @@ fn test_parse_expression() {
 
 #[derive(Debug, PartialEq)]
 pub enum Statement {
-    Expression(Expr),
+    Expression(Option<Expr>),
     Global(Vec<Ident>),
     If {
         if_expr: Expr,
@@ -122,7 +122,7 @@ pub enum Statement {
 }
 
 #[derive(Debug, PartialEq)]
-pub struct Block(Vec<Statement>);
+pub struct Block(pub Vec<Statement>);
 
 pub fn parse_expression(tokvec: &[Token]) -> Expr {
     let mut state = ParserState::new(tokvec);
@@ -132,6 +132,17 @@ pub fn parse_expression(tokvec: &[Token]) -> Expr {
 pub fn parse_statement(tokvec: &[Token]) -> Statement {
     let mut state = ParserState::new(tokvec);
     state.parse_statement()
+}
+
+pub fn parse_statements(tokvec: &[Token]) -> Vec<Statement> {
+    let mut state = ParserState::new(tokvec);
+    let mut stmts = vec![];
+    loop {
+        if state.tokvec.get(0).is_none() {
+            return stmts;
+        }
+        stmts.push(state.parse_statement());
+    }
 }
 
 macro_rules! parse_optional_expression_and_a_token {
@@ -313,7 +324,12 @@ impl<'a> ParserState<'a> {
                     else_block: None,
                 };
             }
-            _ => todo!(),
+            Some(Token::Function) => todo!("`function` is not yet implemented"),
+            _ => {
+                let expr = parse_optional_expression_and_a_token!(self, Token::Semicolon, "a semicolon after expression");
+
+                return Statement::Expression(expr);
+            }
         }
     }
 
