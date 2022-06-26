@@ -521,3 +521,65 @@ impl<'a> ParserState<'a> {
         parse_argument_list, parse_expression, Expr
     }
 }
+
+
+#[test]
+fn test3() {
+    use crate::lex::Ident;
+    use Expr::*;
+    use Statement::*;
+    let src = r#"for (i = 1; i <= 100; i = i + 1) {
+}"#;
+    let lexed = crate::lex::lex(src);
+    let parsed = parse_statements(&lexed);
+
+    assert_eq!(
+        parsed,
+        vec![For(
+            Some(Assign(Ident::from("i"), Box::new(IntLiteral(1)))),
+            Some(LessThanOrEqual(
+                Box::new(Identifier(Ident::from("i"))),
+                Box::new(IntLiteral(100))
+            )),
+            Some(Assign(
+                Ident::from("i"),
+                Box::new(Add(Box::new(Identifier(Ident::from("i"))), Box::new(IntLiteral(1))))
+            )),
+            Block(vec![])
+        )]
+    )
+}
+#[test]
+fn test4() {
+    use crate::lex::Ident;
+    use crate::parse::Expr::*;
+    use crate::parse::Statement::*;
+    let src = r#"for (i = 1; i <= 100; i = i + 1) {
+        
+		print("FizzBuzz\n");
+	
+}"#;
+    let lexed = crate::lex::lex(src);
+    let parsed = crate::parse::parse_statements(&lexed);
+    assert_eq!(
+        parsed,
+        vec![For(
+            Some(Assign(Ident::from("i"), Box::new(IntLiteral(1)))),
+            Some(LessThanOrEqual(
+                Box::new(Identifier(Ident::from("i"))),
+                Box::new(IntLiteral(100))
+            )),
+            Some(Assign(
+                Ident::from("i"),
+                Box::new(Add(
+                    Box::new(Identifier(Ident::from("i"))),
+                    Box::new(IntLiteral(1))
+                ))
+            )),
+            crate::parse::Block(vec![Expression(Some(FunctionCall(
+                Ident::from("print"),
+                vec![StringLiteral("FizzBuzz\n".to_string())]
+            )))])
+        )]
+    )
+}

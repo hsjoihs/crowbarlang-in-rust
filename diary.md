@@ -195,3 +195,7 @@ if let Some(Token::LeftParen) = self.tokvec.get(0) {
 としてるのが誤りだな。もう advance してるから、次に問うべきは get(0) なのか。
 
 よしテスト通ったわね。
+
+FizzBuzz の構文木を手で書いて、ちゃんと期待するのと一致するか調べるか。
+
+調べた。一致した。

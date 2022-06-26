@@ -5,7 +5,7 @@ fn main() {
 #[test]
 fn test1() {
     use lex::Ident;
-    use lex::Token::*;
+
     let src = r#"for (i = 1; i <= 100; i = i + 1) {
 	if (i % 15 == 0) {
 		print("FizzBuzz\n");
@@ -18,124 +18,163 @@ fn test1() {
 	}
 }"#;
     let lexed = lex::lex(src);
-    assert_eq!(
-        lexed,
-        vec![
-            For,
-            LeftParen,
-            Identifier(Ident::from("i")),
-            Assign,
-            IntLiteral(1),
-            Semicolon,
-            Identifier(Ident::from("i")),
-            LessThanOrEqual,
-            IntLiteral(100),
-            Semicolon,
-            Identifier(Ident::from("i")),
-            Assign,
-            Identifier(Ident::from("i")),
-            Add,
-            IntLiteral(1),
-            RightParen,
-            LeftCurly,
-            If,
-            LeftParen,
-            Identifier(Ident::from("i")),
-            Mod,
-            IntLiteral(15),
-            Equal,
-            IntLiteral(0),
-            RightParen,
-            LeftCurly,
-            Identifier(Ident::from("print")),
-            LeftParen,
-            StringLiteral("FizzBuzz\n".to_string()),
-            RightParen,
-            Semicolon,
-            RightCurly,
-            Elsif,
-            LeftParen,
-            Identifier(Ident::from("i")),
-            Mod,
-            IntLiteral(3),
-            Equal,
-            IntLiteral(0),
-            RightParen,
-            LeftCurly,
-            Identifier(Ident::from("print")),
-            LeftParen,
-            StringLiteral("Fizz\n".to_string()),
-            RightParen,
-            Semicolon,
-            RightCurly,
-            Elsif,
-            LeftParen,
-            Identifier(Ident::from("i")),
-            Mod,
-            IntLiteral(5),
-            Equal,
-            IntLiteral(0),
-            RightParen,
-            LeftCurly,
-            Identifier(Ident::from("print")),
-            LeftParen,
-            StringLiteral("Buzz\n".to_string()),
-            RightParen,
-            Semicolon,
-            RightCurly,
-            Else,
-            LeftCurly,
-            Identifier(Ident::from("print")),
-            LeftParen,
-            StringLiteral("".to_string()),
-            Add,
-            Identifier(Ident::from("i")),
-            Add,
-            StringLiteral("\n".to_string()),
-            RightParen,
-            Semicolon,
-            RightCurly,
-            RightCurly
-        ]
-    );
-}
-
-#[test]
-fn test3() {
-    use lex::Ident;
-    use parse::Expr::*;
-    use parse::Statement::*;
-    let src = r#"for (i = 1; i <= 100; i = i + 1) {
-}"#;
-    let lexed = lex::lex(src);
-    let parsed = parse::parse_statements(&lexed);
-
-    assert_eq!(
-        parsed,
-        vec![For(
-            Some(Assign(Ident::from("i"), Box::new(IntLiteral(1)))),
-            Some(LessThanOrEqual(
-                Box::new(Identifier(Ident::from("i"))),
-                Box::new(IntLiteral(100))
-            )),
-            Some(Assign(
-                Ident::from("i"),
-                Box::new(Add(Box::new(Identifier(Ident::from("i"))), Box::new(IntLiteral(1))))
-            )),
-            parse::Block(vec![])
-        )]
-    )
-}
-
-#[test]
-fn test4() {
-    let src = r#"for (i = 1; i <= 100; i = i + 1) {
-        
-		print("FizzBuzz\n");
-	
-}"#;
-    let lexed = lex::lex(src);
-    let _parsed = parse::parse_statements(&lexed);
+    {
+        use lex::Token::*;
+        assert_eq!(
+            lexed,
+            vec![
+                For,
+                LeftParen,
+                Identifier(Ident::from("i")),
+                Assign,
+                IntLiteral(1),
+                Semicolon,
+                Identifier(Ident::from("i")),
+                LessThanOrEqual,
+                IntLiteral(100),
+                Semicolon,
+                Identifier(Ident::from("i")),
+                Assign,
+                Identifier(Ident::from("i")),
+                Add,
+                IntLiteral(1),
+                RightParen,
+                LeftCurly,
+                If,
+                LeftParen,
+                Identifier(Ident::from("i")),
+                Mod,
+                IntLiteral(15),
+                Equal,
+                IntLiteral(0),
+                RightParen,
+                LeftCurly,
+                Identifier(Ident::from("print")),
+                LeftParen,
+                StringLiteral("FizzBuzz\n".to_string()),
+                RightParen,
+                Semicolon,
+                RightCurly,
+                Elsif,
+                LeftParen,
+                Identifier(Ident::from("i")),
+                Mod,
+                IntLiteral(3),
+                Equal,
+                IntLiteral(0),
+                RightParen,
+                LeftCurly,
+                Identifier(Ident::from("print")),
+                LeftParen,
+                StringLiteral("Fizz\n".to_string()),
+                RightParen,
+                Semicolon,
+                RightCurly,
+                Elsif,
+                LeftParen,
+                Identifier(Ident::from("i")),
+                Mod,
+                IntLiteral(5),
+                Equal,
+                IntLiteral(0),
+                RightParen,
+                LeftCurly,
+                Identifier(Ident::from("print")),
+                LeftParen,
+                StringLiteral("Buzz\n".to_string()),
+                RightParen,
+                Semicolon,
+                RightCurly,
+                Else,
+                LeftCurly,
+                Identifier(Ident::from("print")),
+                LeftParen,
+                StringLiteral("".to_string()),
+                Add,
+                Identifier(Ident::from("i")),
+                Add,
+                StringLiteral("\n".to_string()),
+                RightParen,
+                Semicolon,
+                RightCurly,
+                RightCurly
+            ]
+        );
+    }
+    {
+        use crate::lex::Ident;
+        use crate::parse::Expr::*;
+        use crate::parse::Statement::*;
+        let parsed = crate::parse::parse_statements(&lexed);
+        assert_eq!(
+            parsed,
+            vec![For(
+                Some(Assign(Ident::from("i"), Box::new(IntLiteral(1)))),
+                Some(LessThanOrEqual(
+                    Box::new(Identifier(Ident::from("i"))),
+                    Box::new(IntLiteral(100))
+                )),
+                Some(Assign(
+                    Ident::from("i"),
+                    Box::new(Add(
+                        Box::new(Identifier(Ident::from("i"))),
+                        Box::new(IntLiteral(1))
+                    ))
+                )),
+                crate::parse::Block(vec![If {
+                    if_expr: Equal(
+                        Box::new(Mod(
+                            Box::new(Identifier(Ident::from("i"))),
+                            Box::new(IntLiteral(15))
+                        )),
+                        Box::new(IntLiteral(0))
+                    ),
+                    if_block: parse::Block(vec![Expression(Some(FunctionCall(
+                        Ident::from("print"),
+                        vec![StringLiteral("FizzBuzz\n".to_string())]
+                    )))]),
+                    elsif_list: vec![
+                        (
+                            Equal(
+                                Box::new(Mod(
+                                    Box::new(Identifier(Ident::from("i"))),
+                                    Box::new(IntLiteral(3))
+                                )),
+                                Box::new(IntLiteral(0))
+                            ),
+                            parse::Block(vec![Expression(Some(FunctionCall(
+                                Ident::from("print"),
+                                vec![StringLiteral("Fizz\n".to_string())]
+                            )))])
+                        ),
+                        (
+                            Equal(
+                                Box::new(Mod(
+                                    Box::new(Identifier(Ident::from("i"))),
+                                    Box::new(IntLiteral(5))
+                                )),
+                                Box::new(IntLiteral(0))
+                            ),
+                            parse::Block(vec![Expression(Some(FunctionCall(
+                                Ident::from("print"),
+                                vec![StringLiteral("Buzz\n".to_string())]
+                            )))])
+                        )
+                    ],
+                    else_block: Some(parse::Block(vec![Expression(Some(FunctionCall(
+                        Ident::from("print"),
+                        vec![Add(
+                            Box::new(Add(
+                                Box::new(StringLiteral("".to_string())),
+                                Box::new(Identifier(Ident::from("i")))
+                            )),
+                            Box::new(StringLiteral("\n".to_string()))
+                        )]
+                    )))])),
+                }])
+            )]
+        )
+    }
 }
 
 #[test]
