@@ -102,16 +102,45 @@ impl LexerState {
                         );
                         (Some(Token::Identifier(ident)), rest)
                     }
-                    Some('1'..='9') => {
+                    Some('0'..='9') => {
                         let num: String = input
                             .chars()
-                            .take_while(|c| matches!(c, '0'..='9'))
+                            .take_while(|c| matches!(c, '0'..='9' | '.'))
                             .collect();
-                        let rest = input.trim_start_matches(|c| matches!(c, '0'..='9'));
-                        let num = num.parse().unwrap();
-                        (Some(Token::IntLiteral(num)), rest)
+                        let rest = input.trim_start_matches(|c| matches!(c, '0'..='9' | '.'));
+
+                        if num.contains('.') {
+                            // There must be one and only one period, and it must not come at the end
+                            if num.chars().filter(|c| *c == '.').count() == 1 {
+                                if num.ends_with('.') {
+                                    panic!(
+                                        "Invalid numeric literal `{}` found at line `{}`. A numeric literal cannot end with a period.",
+                                        num, self.line_number
+                                    )
+                                }
+                                let num = num.parse().unwrap();
+                                (Some(Token::DoubleLiteral(num)), rest)
+                            } else {
+                                panic!(
+                                    "Invalid numeric literal `{}` found at line `{}`. A numeric literal cannot contain two or more periods.",
+                                    num, self.line_number
+                                )
+                            }
+                        } else if num.starts_with('0') {
+                            // The number must either be 0, or else it cannot start with a zero
+                            if num == "0" {
+                                (Some(Token::IntLiteral(0)), &input[1..])
+                            } else {
+                                panic!(
+                                    "Invalid numeric literal `{}` found at line `{}`. A numeric literal cannot start with a zero unless it is zero itself.",
+                                    num, self.line_number
+                                )
+                            }
+                        } else {
+                            let num = num.parse().unwrap();
+                            (Some(Token::IntLiteral(num)), rest)
+                        }
                     }
-                    Some('0') => (Some(Token::IntLiteral(0)), &input[1..]),
                     Some(c) => {
                         if let Some(rest) = input.strip_prefix('\n') {
                             self.line_number += 1;
