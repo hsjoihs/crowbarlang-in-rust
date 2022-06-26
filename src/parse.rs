@@ -1,8 +1,8 @@
-use crate::lex::Token;
+use crate::lex::{Ident, Token};
 
 #[derive(PartialEq, Debug)]
 pub enum Expr {
-    Assign(String, Box<Expr>),
+    Assign(Ident, Box<Expr>),
     LogicalOr(Box<Expr>, Box<Expr>),
     LogicalAnd(Box<Expr>, Box<Expr>),
     Equal(Box<Expr>, Box<Expr>),
@@ -23,8 +23,8 @@ pub enum Expr {
     StringLiteral(String),
     DoubleLiteral(f64),
     IntLiteral(i32),
-    FunctionCall(String, Vec<Expr>),
-    Identifier(String),
+    FunctionCall(Ident, Vec<Expr>),
+    Identifier(Ident),
 }
 
 struct ParserState<'a> {
@@ -50,6 +50,23 @@ macro_rules! left_assoc_bin {
     };
 }
 
+macro_rules! comma_list {
+    ($this_parser_name: ident, $elem_parser_name: ident, $elem_type: ty) => {
+        fn $this_parser_name(&mut self) -> Vec<$elem_type> {
+            let mut ans = vec![self.$elem_parser_name()];
+            loop {
+                if let Some(Token::Comma) = self.tokvec.get(0) {
+                    self.advance(1);
+                    ans.push(self.$elem_parser_name());
+                } else {
+                    break;
+                }
+            }
+            ans
+        }
+    };
+}
+
 macro_rules! expect_token_and_advance {
     ($self:expr, $token: pat, $expected: expr) => {
         match $self.tokvec.get(0) {
@@ -68,9 +85,10 @@ macro_rules! expect_token_and_advance {
 
 #[test]
 fn test_parse_expression() {
+    use crate::lex::Ident;
     assert_eq!(
         parse_expression(&[
-            Token::Identifier("i".to_string()),
+            Token::Identifier(Ident::from("i")),
             Token::Mod,
             Token::IntLiteral(15),
             Token::Equal,
@@ -78,7 +96,7 @@ fn test_parse_expression() {
         ]),
         Expr::Equal(
             Box::new(Expr::Mod(
-                Box::new(Expr::Identifier("i".to_string())),
+                Box::new(Expr::Identifier(Ident::from("i"))),
                 Box::new(Expr::IntLiteral(15))
             )),
             Box::new(Expr::IntLiteral(0))
@@ -86,9 +104,47 @@ fn test_parse_expression() {
     )
 }
 
+#[derive(Debug, PartialEq)]
+pub enum Statement {
+    Expression(Expr),
+    Global(Vec<Ident>),
+    If {
+        if_expr: Expr,
+        if_block: Block,
+        elsif_list: Vec<(Expr, Block)>,
+        else_block: Option<Block>,
+    },
+    While(Expr, Block),
+    For(Option<Expr>, Option<Expr>, Option<Expr>, Block),
+    Return(Option<Expr>),
+    Break,
+    Continue,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct Block(Vec<Statement>);
+
 pub fn parse_expression(tokvec: &[Token]) -> Expr {
     let mut state = ParserState::new(tokvec);
     state.parse_expression()
+}
+
+pub fn parse_statement(tokvec: &[Token]) -> Statement {
+    let mut state = ParserState::new(tokvec);
+    state.parse_statement()
+}
+
+macro_rules! parse_optional_expression_and_a_token {
+    ($self: expr, $token: pat, $msg: expr) => {
+        if let Some(Token::Semicolon) = $self.tokvec.get(0) {
+            $self.advance(1);
+            None
+        } else {
+            let expr = $self.parse_expression();
+            expect_token_and_advance!($self, $token, $msg);
+            Some(expr)
+        }
+    };
 }
 
 impl<'a> ParserState<'a> {
@@ -98,12 +154,196 @@ impl<'a> ParserState<'a> {
     fn advance(&mut self, i: usize) {
         self.tokvec = &self.tokvec[i..];
     }
+
+    comma_list! {
+        parse_identifier_list, parse_identifier, Ident
+    }
+
+    fn parse_identifier(&mut self) -> Ident {
+        match self.tokvec.get(0) {
+            Some(Token::Identifier(ident)) => {
+                self.advance(1);
+                ident.clone()
+            }
+            None => panic!("Unexpected end of file encountered; expected an identifier"),
+            Some(unexpected) => panic!(
+                "Unexpected {:?} encountered; expected an identifier",
+                unexpected
+            ),
+        }
+    }
+
+    fn parse_statement(&mut self) -> Statement {
+        match self.tokvec.get(0) {
+            Some(Token::GlobalT) => {
+                self.advance(1);
+                let idents = self.parse_identifier_list();
+                expect_token_and_advance!(
+                    self,
+                    Token::Semicolon,
+                    "semicolon at the end of `global` statement"
+                );
+                return Statement::Global(idents);
+            }
+            Some(Token::While) => {
+                self.advance(1);
+                expect_token_and_advance!(
+                    self,
+                    Token::LeftParen,
+                    "an opening parenthesis after `while`"
+                );
+                let expr = self.parse_expression();
+                expect_token_and_advance!(
+                    self,
+                    Token::RightParen,
+                    "a closing parenthesis of a `while` statement"
+                );
+                let block = self.parse_block();
+                return Statement::While(expr, block);
+            }
+            Some(Token::Continue) => {
+                self.advance(1);
+                expect_token_and_advance!(
+                    self,
+                    Token::Semicolon,
+                    "semicolon at the end of `continue` statement"
+                );
+                return Statement::Continue;
+            }
+            Some(Token::Break) => {
+                self.advance(1);
+                expect_token_and_advance!(
+                    self,
+                    Token::Semicolon,
+                    "semicolon at the end of `break` statement"
+                );
+                return Statement::Break;
+            }
+            Some(Token::ReturnT) => {
+                self.advance(1);
+                return Statement::Return(parse_optional_expression_and_a_token!(
+                    self,
+                    Token::Semicolon,
+                    "semicolon at the end of `return` statement"
+                ));
+            }
+            Some(Token::For) => {
+                self.advance(1);
+                expect_token_and_advance!(
+                    self,
+                    Token::LeftParen,
+                    "an opening parenthesis after `for`"
+                );
+                let expr1 = parse_optional_expression_and_a_token!(
+                    self,
+                    Token::Semicolon,
+                    "semicolon after the first argument to `for`"
+                );
+                let expr2 = parse_optional_expression_and_a_token!(
+                    self,
+                    Token::Semicolon,
+                    "semicolon after the second argument to `for`"
+                );
+                let expr3 = parse_optional_expression_and_a_token!(
+                    self,
+                    Token::RightParen,
+                    "a closing parenthesis after the third argument to `for`"
+                );
+                let block = self.parse_block();
+                return Statement::For(expr1, expr2, expr3, block);
+            }
+            Some(Token::If) => {
+                self.advance(1);
+                expect_token_and_advance!(
+                    self,
+                    Token::LeftParen,
+                    "an opening parenthesis after `if`"
+                );
+                let if_expr = self.parse_expression();
+                expect_token_and_advance!(
+                    self,
+                    Token::RightParen,
+                    "a closing parenthesis of a `if` statement"
+                );
+                let if_block = self.parse_block();
+
+                // Four candidates:
+                // (none)
+                // else {}
+                // elsif_list
+                // elsif_list else {}
+
+                let mut elsif_list = vec![];
+                loop {
+                    if let Some(Token::Elsif) = self.tokvec.get(0) {
+                        self.advance(1);
+                        expect_token_and_advance!(
+                            self,
+                            Token::LeftParen,
+                            "an opening parenthesis after `elsif`"
+                        );
+                        let expr = self.parse_expression();
+                        expect_token_and_advance!(
+                            self,
+                            Token::RightParen,
+                            "a closing parenthesis for an `elsif`"
+                        );
+                        let block = self.parse_block();
+                        elsif_list.push((expr, block));
+                    } else {
+                        break;
+                    }
+                }
+
+                if let Some(Token::Else) = self.tokvec.get(0) {
+                    self.advance(1);
+                    let else_block = self.parse_block();
+                    return Statement::If {
+                        if_expr,
+                        if_block,
+                        elsif_list,
+                        else_block: Some(else_block),
+                    };
+                }
+
+                return Statement::If {
+                    if_expr,
+                    if_block,
+                    elsif_list,
+                    else_block: None,
+                };
+            }
+            _ => todo!(),
+        }
+    }
+
+    fn parse_block(&mut self) -> Block {
+        expect_token_and_advance!(
+            self,
+            Token::LeftCurly,
+            "an opening bracket starting a block"
+        );
+        if let Some(Token::RightCurly) = self.tokvec.get(0) {
+            self.advance(1);
+            return Block(vec![]);
+        } else {
+            let mut ans = vec![];
+            loop {
+                if let Some(Token::RightCurly) = self.tokvec.get(0) {
+                    self.advance(1);
+                    return Block(ans);
+                }
+                ans.push(self.parse_statement())
+            }
+        }
+    }
+
     pub fn parse_expression(&mut self) -> Expr {
         if let Some(Token::Identifier(ident)) = self.tokvec.get(0) {
             if let Some(Token::Assign) = self.tokvec.get(1) {
                 self.advance(2);
                 let expr2 = self.parse_expression();
-                return Expr::Assign(ident.to_owned(), Box::new(expr2));
+                return Expr::Assign(ident.clone(), Box::new(expr2));
             }
         }
         self.parse_logical_or_expression()
@@ -210,7 +450,7 @@ impl<'a> ParserState<'a> {
                     self.advance(1);
                     if let Some(Token::RightParen) = self.tokvec.get(1) {
                         self.advance(1);
-                        Expr::FunctionCall(ident.to_owned(), vec![])
+                        Expr::FunctionCall(ident.clone(), vec![])
                     } else {
                         let exprs = self.parse_argument_list();
                         expect_token_and_advance!(
@@ -218,11 +458,11 @@ impl<'a> ParserState<'a> {
                             Token::RightParen,
                             "right paren of a function call"
                         );
-                        Expr::FunctionCall(ident.to_owned(), exprs)
+                        Expr::FunctionCall(ident.clone(), exprs)
                     }
                 } else {
                     // ident
-                    Expr::Identifier(ident.to_owned())
+                    Expr::Identifier(ident.clone())
                 }
             }
             None => {
@@ -235,16 +475,7 @@ impl<'a> ParserState<'a> {
         }
     }
 
-    fn parse_argument_list(&mut self) -> Vec<Expr> {
-        let mut ans = vec![self.parse_expression()];
-        loop {
-            if let Some(Token::Comma) = self.tokvec.get(0) {
-                self.advance(1);
-                ans.push(self.parse_expression());
-            } else {
-                break;
-            }
-        }
-        ans
+    comma_list! {
+        parse_argument_list, parse_expression, Expr
     }
 }

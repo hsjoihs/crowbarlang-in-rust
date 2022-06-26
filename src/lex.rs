@@ -33,10 +33,28 @@ pub enum Token {
     Mul,
     Div,
     Mod,
-    Identifier(String),
+    Identifier(Ident),
     IntLiteral(i32),
     DoubleLiteral(f64),
     StringLiteral(String),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Ident(String);
+
+impl Ident {
+    pub fn from(s: &str) -> Self {
+        let mut iter = s.chars();
+        assert!(matches!(iter.next(), Some('a'..='z' | 'A'..='Z' | '_')));
+        for c in iter {
+            assert!(matches!(c, 'a'..='z' | 'A'..='Z' | '_' | '0'..='9'));
+        }
+        Ident(s.to_owned())
+    }
+
+    fn from_string_unchecked(s: String) -> Self {
+        Ident(s)
+    }
 }
 
 enum LexerMode {
@@ -62,7 +80,7 @@ macro_rules! try_strip_and_return {
 fn test_get_token_raw() {
     assert_eq!(
         LexerState::new().get_token_raw("a(b)"),
-        (Some(Token::Identifier("a".to_string())), "(b)")
+        (Some(Token::Identifier(Ident::from("a"))), "(b)")
     );
 
     assert_eq!(
@@ -100,7 +118,7 @@ impl LexerState {
                         let rest = input.trim_start_matches(
                             |c| matches!(c, 'a'..='z' | 'A'..='Z' | '_' | '0'..='9'),
                         );
-                        (Some(Token::Identifier(ident)), rest)
+                        (Some(Token::Identifier(Ident::from_string_unchecked(ident))), rest)
                     }
                     Some('0'..='9') => {
                         let num: String = input
@@ -262,7 +280,7 @@ pub fn lex(input: &str) -> Vec<Token> {
             ("false", Token::FalseT),
             ("global", Token::GlobalT),
         ] {
-            if token == Token::Identifier(reserved_str.to_string()) {
+            if token == Token::Identifier(Ident::from(reserved_str)) {
                 ans.push(reserved_token.clone());
                 continue 'outer;
             }
