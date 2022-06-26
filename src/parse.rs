@@ -55,7 +55,7 @@ macro_rules! comma_list {
         fn $this_parser_name(&mut self) -> Vec<$elem_type> {
             let mut ans = vec![self.$elem_parser_name()];
             loop {
-                if let Some(Token::Comma) = self.tokvec.get(0) {
+                if self.tokvec.get(0) == Some(&Token::Comma) {
                     self.advance(1);
                     ans.push(self.$elem_parser_name());
                 } else {
@@ -87,7 +87,7 @@ macro_rules! expect_token_and_advance {
 fn test_parse_expression() {
     use crate::lex::Ident;
     assert_eq!(
-        parse_expression(&[
+        crate::parse::expression(&[
             Token::Identifier(Ident::from("i")),
             Token::Mod,
             Token::IntLiteral(15),
@@ -101,7 +101,7 @@ fn test_parse_expression() {
             )),
             Box::new(Expr::IntLiteral(0))
         )
-    )
+    );
 }
 
 #[test]
@@ -122,7 +122,7 @@ fn test_parse_expression2() {
             vec![Expr::StringLiteral("FizzBuzz\n".to_string())]
         )
     );
-    assert_eq!(state.tokvec, vec![])
+    assert_eq!(state.tokvec, vec![]);
 }
 
 #[derive(Debug, PartialEq)]
@@ -145,22 +145,26 @@ pub enum Statement {
 #[derive(Debug, PartialEq)]
 pub struct Block(pub Vec<Statement>);
 
-pub fn parse_expression(tokvec: &[Token]) -> Expr {
+#[must_use]
+pub fn expression(tokvec: &[Token]) -> Expr {
     let mut state = ParserState::new(tokvec);
     state.parse_expression()
 }
 
-pub fn parse_statement(tokvec: &[Token]) -> Statement {
+#[must_use]
+pub fn statement(tokvec: &[Token]) -> Statement {
     let mut state = ParserState::new(tokvec);
     state.parse_statement()
 }
 
-pub fn parse_translation_unit(tokvec: &[Token]) -> Vec<DefinitionOrStatement> {
+#[must_use]
+pub fn translation_unit(tokvec: &[Token]) -> Vec<DefinitionOrStatement> {
     let mut state = ParserState::new(tokvec);
     state.parse_translation_unit()
 }
 
-pub fn parse_statements(tokvec: &[Token]) -> Vec<Statement> {
+#[must_use]
+pub fn statements(tokvec: &[Token]) -> Vec<Statement> {
     let mut state = ParserState::new(tokvec);
     let mut stmts = vec![];
     loop {
@@ -173,7 +177,7 @@ pub fn parse_statements(tokvec: &[Token]) -> Vec<Statement> {
 
 macro_rules! parse_optional_expression_and_a_token {
     ($self: expr, $token: pat, $msg: expr) => {
-        if let Some(Token::Semicolon) = $self.tokvec.get(0) {
+        if $self.tokvec.get(0) == Some(&Token::Semicolon) {
             $self.advance(1);
             None
         } else {
@@ -185,9 +189,9 @@ macro_rules! parse_optional_expression_and_a_token {
 }
 #[derive(PartialEq, Debug)]
 pub struct FuncDef {
-   pub func_name: Ident,
-   pub params: Vec<Ident>,
-   pub block: Block,
+    pub func_name: Ident,
+    pub params: Vec<Ident>,
+    pub block: Block,
 }
 
 #[derive(PartialEq, Debug)]
@@ -197,7 +201,7 @@ pub enum DefinitionOrStatement {
 }
 
 impl<'a> ParserState<'a> {
-    pub fn new(tokvec: &'a [Token]) -> Self {
+    pub const fn new(tokvec: &'a [Token]) -> Self {
         ParserState { tokvec }
     }
     fn advance(&mut self, i: usize) {
@@ -215,7 +219,7 @@ impl<'a> ParserState<'a> {
     }
 
     fn parse_definition_or_statement(&mut self) -> DefinitionOrStatement {
-        if let Some(Token::Function) = self.tokvec.get(0) {
+        if self.tokvec.get(0) == Some(&Token::Function) {
             let func_def = self.parse_function_definition();
             DefinitionOrStatement::Definition(func_def)
         } else {
@@ -225,7 +229,7 @@ impl<'a> ParserState<'a> {
     }
 
     fn parse_function_definition(&mut self) -> FuncDef {
-        if let Some(Token::Function) = self.tokvec.get(0) {
+        if self.tokvec.get(0) == Some(&Token::Function) {
             self.advance(1);
             if let Some(Token::Identifier(func_name)) = self.tokvec.get(0) {
                 self.advance(1);
@@ -234,7 +238,7 @@ impl<'a> ParserState<'a> {
                     Token::LeftParen,
                     "an opening parenthesis after the name of the function"
                 );
-                if let Some(Token::RightParen) = self.tokvec.get(0) {
+                if self.tokvec.get(0) == Some(&Token::RightParen) {
                     self.advance(1);
                     let block = self.parse_block();
                     FuncDef {
@@ -388,7 +392,7 @@ impl<'a> ParserState<'a> {
 
                 let mut elsif_list = vec![];
                 loop {
-                    if let Some(Token::Elsif) = self.tokvec.get(0) {
+                    if self.tokvec.get(0) == Some(&Token::Elsif) {
                         self.advance(1);
                         expect_token_and_advance!(
                             self,
@@ -408,7 +412,7 @@ impl<'a> ParserState<'a> {
                     }
                 }
 
-                if let Some(Token::Else) = self.tokvec.get(0) {
+                if self.tokvec.get(0) == Some(&Token::Else) {
                     self.advance(1);
                     let else_block = self.parse_block();
                     return Statement::If {
@@ -446,24 +450,23 @@ impl<'a> ParserState<'a> {
             Token::LeftCurly,
             "an opening bracket starting a block"
         );
-        if let Some(Token::RightCurly) = self.tokvec.get(0) {
+        if self.tokvec.get(0) == Some(&Token::RightCurly) {
             self.advance(1);
             return Block(vec![]);
-        } else {
-            let mut ans = vec![];
-            loop {
-                if let Some(Token::RightCurly) = self.tokvec.get(0) {
-                    self.advance(1);
-                    return Block(ans);
-                }
-                ans.push(self.parse_statement())
+        }
+        let mut ans = vec![];
+        loop {
+            if self.tokvec.get(0) == Some(&Token::RightCurly) {
+                self.advance(1);
+                return Block(ans);
             }
+            ans.push(self.parse_statement());
         }
     }
 
     pub fn parse_expression(&mut self) -> Expr {
         if let Some(Token::Identifier(ident)) = self.tokvec.get(0) {
-            if let Some(Token::Assign) = self.tokvec.get(1) {
+            if self.tokvec.get(1) == Some(&Token::Assign) {
                 self.advance(2);
                 let expr2 = self.parse_expression();
                 return Expr::Assign(ident.clone(), Box::new(expr2));
@@ -527,7 +530,7 @@ impl<'a> ParserState<'a> {
     }
 
     fn parse_unary_expression(&mut self) -> Expr {
-        if let Some(Token::Sub) = self.tokvec.get(0) {
+        if self.tokvec.get(0) == Some(&Token::Sub) {
             self.advance(1);
             let expr2 = self.parse_unary_expression();
             return Expr::Negative(Box::new(expr2));
@@ -551,7 +554,7 @@ impl<'a> ParserState<'a> {
             }
             Some(Token::StringLiteral(s)) => {
                 self.advance(1);
-                Expr::StringLiteral(s.to_owned())
+                Expr::StringLiteral(s.clone())
             }
             Some(Token::DoubleLiteral(d)) => {
                 self.advance(1);
@@ -569,9 +572,9 @@ impl<'a> ParserState<'a> {
             }
             Some(Token::Identifier(ident)) => {
                 self.advance(1);
-                if let Some(Token::LeftParen) = self.tokvec.get(0) {
+                if self.tokvec.get(0) == Some(&Token::LeftParen) {
                     self.advance(1);
-                    if let Some(Token::RightParen) = self.tokvec.get(0) {
+                    if self.tokvec.get(0) == Some(&Token::RightParen) {
                         self.advance(1);
                         Expr::FunctionCall(ident.clone(), vec![])
                     } else {
@@ -606,12 +609,12 @@ impl<'a> ParserState<'a> {
 #[test]
 fn test3() {
     use crate::lex::Ident;
-    use Expr::*;
-    use Statement::*;
+    use Expr::{Add, Assign, Identifier, IntLiteral, LessThanOrEqual};
+    use Statement::For;
     let src = r#"for (i = 1; i <= 100; i = i + 1) {
 }"#;
     let lexed = crate::lex::lex(src);
-    let parsed = parse_statements(&lexed);
+    let parsed = crate::parse::statements(&lexed);
 
     assert_eq!(
         parsed,
@@ -630,20 +633,20 @@ fn test3() {
             )),
             Block(vec![])
         )]
-    )
+    );
 }
 #[test]
 fn test4() {
     use crate::lex::Ident;
-    use crate::parse::Expr::*;
-    use crate::parse::Statement::*;
+    use crate::parse::Expr::{Add, Assign, FunctionCall, Identifier, IntLiteral, LessThanOrEqual, StringLiteral};
+    use crate::parse::Statement::{Expression, For};
     let src = r#"for (i = 1; i <= 100; i = i + 1) {
         
 		print("FizzBuzz\n");
 	
 }"#;
     let lexed = crate::lex::lex(src);
-    let parsed = crate::parse::parse_statements(&lexed);
+    let parsed = crate::parse::statements(&lexed);
     assert_eq!(
         parsed,
         vec![For(
@@ -664,5 +667,5 @@ fn test4() {
                 vec![StringLiteral("FizzBuzz\n".to_string())]
             )))])
         )]
-    )
+    );
 }

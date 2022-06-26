@@ -43,17 +43,22 @@ pub enum Token {
 pub struct Ident(String);
 
 impl Ident {
+    /// # Panics
+    /// Panics if the input does not start with a character that matches `'a'..='z' | 'A'..='Z' | '_'`,
+    /// or if the input contains something other than `'a'..='z' | 'A'..='Z' | '_' | '0'..='9'`.
+    #[must_use]
     pub fn from(s: &str) -> Self {
         let mut iter = s.chars();
         assert!(matches!(iter.next(), Some('a'..='z' | 'A'..='Z' | '_')));
         for c in iter {
             assert!(matches!(c, 'a'..='z' | 'A'..='Z' | '_' | '0'..='9'));
         }
-        Ident(s.to_owned())
+        Self(s.to_owned())
     }
 
-    fn from_string_unchecked(s: String) -> Self {
-        Ident(s)
+    #[must_use]
+    const fn from_string_unchecked(s: String) -> Self {
+        Self(s)
     }
 }
 
@@ -98,8 +103,9 @@ fn test_get_token_raw() {
 }
 
 impl LexerState {
-    fn new() -> LexerState {
-        LexerState {
+    #[must_use]
+    const fn new() -> Self {
+        Self {
             line_number: 0,
             mode: LexerMode::Initial,
         }
@@ -118,7 +124,10 @@ impl LexerState {
                         let rest = input.trim_start_matches(
                             |c| matches!(c, 'a'..='z' | 'A'..='Z' | '_' | '0'..='9'),
                         );
-                        (Some(Token::Identifier(Ident::from_string_unchecked(ident))), rest)
+                        (
+                            Some(Token::Identifier(Ident::from_string_unchecked(ident))),
+                            rest,
+                        )
                     }
                     Some('0'..='9') => {
                         let num: String = input
@@ -130,12 +139,10 @@ impl LexerState {
                         if num.contains('.') {
                             // There must be one and only one period, and it must not come at the end
                             if num.chars().filter(|c| *c == '.').count() == 1 {
-                                if num.ends_with('.') {
-                                    panic!(
-                                        "Invalid numeric literal `{}` found at line `{}`. A numeric literal cannot end with a period.",
-                                        num, self.line_number
-                                    )
-                                }
+                                assert!(
+                                    !num.ends_with('.'),
+                                     "Invalid numeric literal `{}` found at line `{}`. A numeric literal cannot end with a period.",
+                                        num, self.line_number);
                                 let num = num.parse().unwrap();
                                 (Some(Token::DoubleLiteral(num)), rest)
                             } else {
@@ -237,7 +244,7 @@ impl LexerState {
                             None => panic!("Unterminated string literal."),
                             Some(c) => {
                                 ans.push(c);
-                                rest = &rest[c.len_utf8()..]
+                                rest = &rest[c.len_utf8()..];
                             }
                         }
                     }
@@ -258,6 +265,7 @@ impl LexerState {
     }
 }
 
+#[must_use]
 pub fn lex(input: &str) -> Vec<Token> {
     let mut ans = Vec::new();
     let mut state = LexerState::new();
