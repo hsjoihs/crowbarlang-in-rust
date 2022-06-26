@@ -128,6 +128,17 @@ fn test3() {
 }
 
 #[test]
+fn test4() {
+    let src = r#"for (i = 1; i <= 100; i = i + 1) {
+        
+		print("FizzBuzz\n");
+	
+}"#;
+    let lexed = lex::lex(src);
+    let _parsed = parse::parse_statements(&lexed);
+}
+
+#[test]
 fn test2() {
     use lex::Ident;
     use lex::Token::*;

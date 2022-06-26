@@ -151,3 +151,47 @@ crowbar の仕様上は、`([1-9][0-9]*)|"0"` が整数で、`[0-9]+\.[0-9]+` �
 書いた。
 
 `function` を実装してないけどとりあえずパースしてみよう。おや FizzBuzz は落ちた。for 文単体だと通る。了解。
+
+えーと `print("FizzBuzz\n");` で落ちてる。
+
+## 2022年6月27日 (Day 3)
+
+```rust
+#[test]
+fn test_parse_expression2() {
+    use crate::lex::Ident;
+    let tokvec = vec![
+        Token::Identifier(Ident::from("print")),
+        Token::LeftParen,
+        Token::StringLiteral("FizzBuzz\n".to_string()),
+        Token::RightParen,
+    ];
+    let mut state = ParserState::new(&tokvec);
+    let expr = state.parse_expression();
+    assert_eq!(state.tokvec, vec![])
+}
+```
+
+こいつが 
+
+```
+assertion failed: `(left == right)`
+  left: `[RightParen]`,
+ right: `[]`
+```
+
+と言ってるので、右カッコを食い忘れたっぽいな。
+
+あー理解。
+
+```rust
+if let Some(Token::LeftParen) = self.tokvec.get(0) {
+	self.advance(1);
+	if let Some(Token::RightParen) = self.tokvec.get(1) {
+	...
+	}
+}
+```
+としてるのが誤りだな。もう advance してるから、次に問うべきは get(0) なのか。
+
+よしテスト通ったわね。

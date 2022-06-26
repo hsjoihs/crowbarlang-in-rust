@@ -104,6 +104,27 @@ fn test_parse_expression() {
     )
 }
 
+#[test]
+fn test_parse_expression2() {
+    use crate::lex::Ident;
+    let tokvec = vec![
+        Token::Identifier(Ident::from("print")),
+        Token::LeftParen,
+        Token::StringLiteral("FizzBuzz\n".to_string()),
+        Token::RightParen,
+    ];
+    let mut state = ParserState::new(&tokvec);
+    let expr = state.parse_expression();
+    assert_eq!(
+        expr,
+        Expr::FunctionCall(
+            Ident::from("print"),
+            vec![Expr::StringLiteral("FizzBuzz\n".to_string())]
+        )
+    );
+    assert_eq!(state.tokvec, vec![])
+}
+
 #[derive(Debug, PartialEq)]
 pub enum Statement {
     Expression(Option<Expr>),
@@ -326,7 +347,12 @@ impl<'a> ParserState<'a> {
             }
             Some(Token::Function) => todo!("`function` is not yet implemented"),
             _ => {
-                let expr = parse_optional_expression_and_a_token!(self, Token::Semicolon, "a semicolon after expression");
+                dbg!(&self.tokvec);
+                let expr = parse_optional_expression_and_a_token!(
+                    self,
+                    Token::Semicolon,
+                    "a semicolon after expression"
+                );
 
                 return Statement::Expression(expr);
             }
@@ -464,7 +490,7 @@ impl<'a> ParserState<'a> {
                 self.advance(1);
                 if let Some(Token::LeftParen) = self.tokvec.get(0) {
                     self.advance(1);
-                    if let Some(Token::RightParen) = self.tokvec.get(1) {
+                    if let Some(Token::RightParen) = self.tokvec.get(0) {
                         self.advance(1);
                         Expr::FunctionCall(ident.clone(), vec![])
                     } else {
