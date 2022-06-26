@@ -180,7 +180,6 @@ fn test1() {
 #[test]
 fn test2() {
     use lex::Ident;
-    use lex::Token::*;
     let src = r##"
 a = 10;
 
@@ -200,77 +199,150 @@ print("a.." + a + "\n");
 
 b = 3.2;
 print("b.." + b + "\n");"##;
-    assert_eq!(
-        lex::lex(src),
-        vec![
-            Identifier(Ident::from("a")),
-            Assign,
-            IntLiteral(10),
-            Semicolon,
-            Function,
-            Identifier(Ident::from("func")),
-            LeftParen,
-            RightParen,
-            LeftCurly,
-            GlobalT,
-            Identifier(Ident::from("a")),
-            Semicolon,
-            Identifier(Ident::from("a")),
-            Assign,
-            IntLiteral(20),
-            Semicolon,
-            RightCurly,
-            Function,
-            Identifier(Ident::from("func2")),
-            LeftParen,
-            RightParen,
-            LeftCurly,
-            Identifier(Ident::from("a")),
-            Assign,
-            IntLiteral(30),
-            Semicolon,
-            Identifier(Ident::from("print")),
-            LeftParen,
-            StringLiteral("a..".to_string()),
-            Add,
-            Identifier(Ident::from("a")),
-            Add,
-            StringLiteral("\n".to_string()),
-            RightParen,
-            Semicolon,
-            RightCurly,
-            Identifier(Ident::from("func")),
-            LeftParen,
-            RightParen,
-            Semicolon,
-            Identifier(Ident::from("func2")),
-            LeftParen,
-            RightParen,
-            Semicolon,
-            Identifier(Ident::from("print")),
-            LeftParen,
-            StringLiteral("a..".to_string()),
-            Add,
-            Identifier(Ident::from("a")),
-            Add,
-            StringLiteral("\n".to_string()),
-            RightParen,
-            Semicolon,
-            Identifier(Ident::from("b")),
-            Assign,
-            DoubleLiteral(3.2),
-            Semicolon,
-            Identifier(Ident::from("print")),
-            LeftParen,
-            StringLiteral("b..".to_string()),
-            Add,
-            Identifier(Ident::from("b")),
-            Add,
-            StringLiteral("\n".to_string()),
-            RightParen,
-            Semicolon
-        ]
-    );
+    let lexed = lex::lex(src);
+    {
+        use lex::Token::*;
+        assert_eq!(
+            lexed,
+            vec![
+                Identifier(Ident::from("a")),
+                Assign,
+                IntLiteral(10),
+                Semicolon,
+                Function,
+                Identifier(Ident::from("func")),
+                LeftParen,
+                RightParen,
+                LeftCurly,
+                GlobalT,
+                Identifier(Ident::from("a")),
+                Semicolon,
+                Identifier(Ident::from("a")),
+                Assign,
+                IntLiteral(20),
+                Semicolon,
+                RightCurly,
+                Function,
+                Identifier(Ident::from("func2")),
+                LeftParen,
+                RightParen,
+                LeftCurly,
+                Identifier(Ident::from("a")),
+                Assign,
+                IntLiteral(30),
+                Semicolon,
+                Identifier(Ident::from("print")),
+                LeftParen,
+                StringLiteral("a..".to_string()),
+                Add,
+                Identifier(Ident::from("a")),
+                Add,
+                StringLiteral("\n".to_string()),
+                RightParen,
+                Semicolon,
+                RightCurly,
+                Identifier(Ident::from("func")),
+                LeftParen,
+                RightParen,
+                Semicolon,
+                Identifier(Ident::from("func2")),
+                LeftParen,
+                RightParen,
+                Semicolon,
+                Identifier(Ident::from("print")),
+                LeftParen,
+                StringLiteral("a..".to_string()),
+                Add,
+                Identifier(Ident::from("a")),
+                Add,
+                StringLiteral("\n".to_string()),
+                RightParen,
+                Semicolon,
+                Identifier(Ident::from("b")),
+                Assign,
+                DoubleLiteral(3.2),
+                Semicolon,
+                Identifier(Ident::from("print")),
+                LeftParen,
+                StringLiteral("b..".to_string()),
+                Add,
+                Identifier(Ident::from("b")),
+                Add,
+                StringLiteral("\n".to_string()),
+                RightParen,
+                Semicolon
+            ]
+        );
+    }
+
+    let parsed = crate::parse::parse_translation_unit(&lexed);
+    {
+        use crate::lex::Ident;
+        use crate::parse::DefinitionOrStatement::*;
+        use crate::parse::Expr::*;
+        use crate::parse::FuncDef;
+        use crate::parse::Statement::*;
+        assert_eq!(
+            parsed,
+            vec![
+                Statement(Expression(Some(Assign(
+                    Ident::from("a"),
+                    Box::new(IntLiteral(10))
+                )))),
+                Definition(FuncDef {
+                    func_name: Ident::from("func"),
+                    params: vec![],
+                    block: parse::Block(vec![
+                        Global(vec![Ident::from("a")]),
+                        Expression(Some(Assign(Ident::from("a"), Box::new(IntLiteral(20)))))
+                    ])
+                }),
+                Definition(FuncDef {
+                    func_name: Ident::from("func2"),
+                    params: vec![],
+                    block: parse::Block(vec![
+                        Expression(Some(Assign(Ident::from("a"), Box::new(IntLiteral(30))))),
+                        Expression(Some(FunctionCall(
+                            Ident::from("print"),
+                            vec![Add(
+                                Box::new(Add(
+                                    Box::new(StringLiteral("a..".to_string())),
+                                    Box::new(Identifier(Ident::from("a")))
+                                )),
+                                Box::new(StringLiteral("\n".to_string()))
+                            )]
+                        )))
+                    ])
+                }),
+                Statement(Expression(Some(FunctionCall(Ident::from("func"), vec![])))),
+                Statement(Expression(Some(FunctionCall(Ident::from("func2"), vec![])))),
+                Statement(Expression(Some(FunctionCall(
+                    Ident::from("print"),
+                    vec![Add(
+                        Box::new(Add(
+                            Box::new(StringLiteral("a..".to_string())),
+                            Box::new(Identifier(Ident::from("a")))
+                        )),
+                        Box::new(StringLiteral("\n".to_string()))
+                    )]
+                )))),
+                Statement(Expression(Some(Assign(
+                    Ident::from("b"),
+                    Box::new(DoubleLiteral(3.2))
+                )))),
+                Statement(Expression(Some(FunctionCall(
+                    Ident::from("print"),
+                    vec![Add(
+                        Box::new(Add(
+                            Box::new(StringLiteral("b..".to_string())),
+                            Box::new(Identifier(Ident::from("b")))
+                        )),
+                        Box::new(StringLiteral("\n".to_string()))
+                    )]
+                ))))
+            ]
+        )
+    }
 }
 
 pub mod lex;

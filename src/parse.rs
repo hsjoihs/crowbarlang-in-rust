@@ -155,6 +155,11 @@ pub fn parse_statement(tokvec: &[Token]) -> Statement {
     state.parse_statement()
 }
 
+pub fn parse_translation_unit(tokvec: &[Token]) -> Vec<DefinitionOrStatement> {
+    let mut state = ParserState::new(tokvec);
+    state.parse_translation_unit()
+}
+
 pub fn parse_statements(tokvec: &[Token]) -> Vec<Statement> {
     let mut state = ParserState::new(tokvec);
     let mut stmts = vec![];
@@ -178,6 +183,18 @@ macro_rules! parse_optional_expression_and_a_token {
         }
     };
 }
+#[derive(PartialEq, Debug)]
+pub struct FuncDef {
+   pub func_name: Ident,
+   pub params: Vec<Ident>,
+   pub block: Block,
+}
+
+#[derive(PartialEq, Debug)]
+pub enum DefinitionOrStatement {
+    Definition(FuncDef),
+    Statement(Statement),
+}
 
 impl<'a> ParserState<'a> {
     pub fn new(tokvec: &'a [Token]) -> Self {
@@ -185,6 +202,70 @@ impl<'a> ParserState<'a> {
     }
     fn advance(&mut self, i: usize) {
         self.tokvec = &self.tokvec[i..];
+    }
+
+    pub fn parse_translation_unit(&mut self) -> Vec<DefinitionOrStatement> {
+        let mut things = vec![];
+        loop {
+            if self.tokvec.get(0).is_none() {
+                return things;
+            }
+            things.push(self.parse_definition_or_statement());
+        }
+    }
+
+    fn parse_definition_or_statement(&mut self) -> DefinitionOrStatement {
+        if let Some(Token::Function) = self.tokvec.get(0) {
+            let func_def = self.parse_function_definition();
+            DefinitionOrStatement::Definition(func_def)
+        } else {
+            let statement = self.parse_statement();
+            DefinitionOrStatement::Statement(statement)
+        }
+    }
+
+    fn parse_function_definition(&mut self) -> FuncDef {
+        if let Some(Token::Function) = self.tokvec.get(0) {
+            self.advance(1);
+            if let Some(Token::Identifier(func_name)) = self.tokvec.get(0) {
+                self.advance(1);
+                expect_token_and_advance!(
+                    self,
+                    Token::LeftParen,
+                    "an opening parenthesis after the name of the function"
+                );
+                if let Some(Token::RightParen) = self.tokvec.get(0) {
+                    self.advance(1);
+                    let block = self.parse_block();
+                    FuncDef {
+                        func_name: func_name.clone(),
+                        params: vec![],
+                        block,
+                    }
+                } else {
+                    let params = self.parse_parameter_list();
+                    expect_token_and_advance!(
+                        self,
+                        Token::RightParen,
+                        "a closing parenthesis after the name of the function"
+                    );
+                    let block = self.parse_block();
+                    FuncDef {
+                        func_name: func_name.clone(),
+                        params,
+                        block,
+                    }
+                }
+            } else {
+                panic!("Cannot find an identifier after the keyword `function`");
+            }
+        } else {
+            panic!("This should not be handled by `parse_function_definition`")
+        }
+    }
+
+    comma_list! {
+        parse_parameter_list, parse_identifier, Ident
     }
 
     comma_list! {
@@ -199,8 +280,8 @@ impl<'a> ParserState<'a> {
             }
             None => panic!("Unexpected end of file encountered; expected an identifier"),
             Some(unexpected) => panic!(
-                "Unexpected {:?} encountered; expected an identifier",
-                unexpected
+                "Unexpected {:?} encountered; expected an identifier. \nRemaining tokens: \n{:?}",
+                unexpected, self.tokvec
             ),
         }
     }
@@ -522,7 +603,6 @@ impl<'a> ParserState<'a> {
     }
 }
 
-
 #[test]
 fn test3() {
     use crate::lex::Ident;
@@ -543,7 +623,10 @@ fn test3() {
             )),
             Some(Assign(
                 Ident::from("i"),
-                Box::new(Add(Box::new(Identifier(Ident::from("i"))), Box::new(IntLiteral(1))))
+                Box::new(Add(
+                    Box::new(Identifier(Ident::from("i"))),
+                    Box::new(IntLiteral(1))
+                ))
             )),
             Block(vec![])
         )]
