@@ -292,7 +292,7 @@ impl<'a> ParserState<'a> {
 
     fn parse_statement(&mut self) -> Statement {
         match self.tokvec.get(0) {
-            Some(Token::GlobalT) => {
+            Some(Token::Global) => {
                 self.advance(1);
                 let idents = self.parse_identifier_list();
                 expect_token_and_advance!(
@@ -336,7 +336,7 @@ impl<'a> ParserState<'a> {
                 );
                 return Statement::Break;
             }
-            Some(Token::ReturnT) => {
+            Some(Token::Return) => {
                 self.advance(1);
                 return Statement::Return(parse_optional_expression_and_a_token!(
                     self,
@@ -540,15 +540,15 @@ impl<'a> ParserState<'a> {
 
     fn parse_primary_expression(&mut self) -> Expr {
         match self.tokvec.get(0) {
-            Some(Token::NullT) => {
+            Some(Token::Null) => {
                 self.advance(1);
                 Expr::Null
             }
-            Some(Token::FalseT) => {
+            Some(Token::False) => {
                 self.advance(1);
                 Expr::False
             }
-            Some(Token::TrueT) => {
+            Some(Token::True) => {
                 self.advance(1);
                 Expr::True
             }

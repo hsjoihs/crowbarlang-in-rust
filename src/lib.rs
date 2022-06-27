@@ -203,7 +203,7 @@ b = 3.2;
 print("b.." + b + "\n");"##;
         let lexed = crate::lex::lex(src);
         {
-            use crate::lex::Token::{Add, Assign, DoubleLiteral, Function, GlobalT, Identifier, IntLiteral, LeftCurly, LeftParen, RightCurly, RightParen, Semicolon, StringLiteral};
+            use crate::lex::Token::{Add, Assign, DoubleLiteral, Function, Global, Identifier, IntLiteral, LeftCurly, LeftParen, RightCurly, RightParen, Semicolon, StringLiteral};
             assert_eq!(
                 lexed,
                 vec![
@@ -216,7 +216,7 @@ print("b.." + b + "\n");"##;
                     LeftParen,
                     RightParen,
                     LeftCurly,
-                    GlobalT,
+                    Global,
                     Identifier(Ident::from("a")),
                     Semicolon,
                     Identifier(Ident::from("a")),
