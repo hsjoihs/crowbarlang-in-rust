@@ -230,6 +230,8 @@ FizzBuzz の構文木を手で書いて、ちゃんと期待するのと一致�
 
 ## 2022年6月30日 (Day 4)
 
+### continue
+
 あー理解。
 
 ```c
@@ -261,11 +263,11 @@ crb_execute_statement_list(CRB_Interpreter *inter, LocalEnvironment *env,
 ```js
 for (j = 0; j < 2; j = j + 1) {
 	for (i = 0; i < 2; i = i + 1) {
-		print("i.." + i);
+		print("i.." + i + "\n");
 		continue;
-		print("foo");
+		print("foo" + "\n");
 	}
-	print("bar");
+	print("bar" + "\n");
 }
 ```
 
@@ -281,3 +283,29 @@ bar
 ```
 
 と出る。さてこれを crowbar で実行するとどうなる？
+
+### crowbar をビルドしよう
+
+とりあえず crowbar を走らせないといかん。ということで make してみる。えーと -Werror がついているせいで 
+
+```
+crowbar.l:81:9: error: implicitly declaring library function 'isprint' with type 'int (int)'
+      [-Werror,-Wimplicit-function-declaration]
+```
+
+で落ちてしまうな。とりあえず crowbar.l に `#include <ctype.h>` を足してみる。
+
+さらに落ちるので、`CFLAGS` に ` -Wno-implicit` を加筆して、`$(CC)` としかなっていないところも `$(CC) $(CFLAGS)` に書き換えると、ビルドが通る。あれ？ crowbar が生成されない。
+
+ああ、`$(TARGET)` の最終行のはリンカ呼び出しをしてるだけだから CFLAGS をつけちゃダメなのね。よしできた。
+
+とりあえず FizzBuzz が走ることを確認したので、さっきのコードを試そう。
+
+```
+i..0
+i..1
+i..0
+i..1
+```
+
+よっしゃ本家実装がバグった！！！！
