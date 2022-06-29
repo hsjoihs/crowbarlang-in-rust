@@ -225,3 +225,59 @@ FizzBuzz の構文木を手で書いて、ちゃんと期待するのと一致�
 さて実行部分。
 
 よし、global文以外は実装できたかな。とりあえずコミット。式の実行はまだだけど。
+
+……ん？この reference 実装って continue はどう実装してるの？
+
+## 2022年6月30日 (Day 4)
+
+あー理解。
+
+```c
+StatementResult
+crb_execute_statement_list(CRB_Interpreter *inter, LocalEnvironment *env,
+                           StatementList *list)
+{
+    StatementList *pos;
+    StatementResult result;
+
+    result.type = NORMAL_STATEMENT_RESULT;
+    for (pos = list; pos; pos = pos->next) {
+        result = execute_statement(inter, env, pos->statement);
+        if (result.type != NORMAL_STATEMENT_RESULT)
+            goto FUNC_END;
+    }
+
+  FUNC_END:
+    return result;
+}
+```
+
+とあるから、`NORMAL_STATEMENT_RESULT` でないものが帰ってきた時点でブロックの実行がストップするからこれでいいのか。
+
+えーと for 文の第三式はそもそも continue で飛ばされた際も実行されるのが正しいから、ここの部分も OK か。
+
+ん？ `continue;` をした直後に for 文の条件が false になると `CONTINUE_STATEMENT_RESULT` がループ外に漏洩するのでは？
+
+```js
+for (j = 0; j < 2; j = j + 1) {
+	for (i = 0; i < 2; i = i + 1) {
+		print("i.." + i);
+		continue;
+		print("foo");
+	}
+	print("bar");
+}
+```
+
+と書いて、`const print = console.log` とでもしてやって JavaScript で実行すると
+
+```
+i..0
+i..1
+bar
+i..0
+i..1
+bar
+```
+
+と出る。さてこれを crowbar で実行するとどうなる？
