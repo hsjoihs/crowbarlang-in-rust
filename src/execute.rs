@@ -233,6 +233,7 @@ impl InterpreterMutable {
             let cond = self.eval_expression(expr);
             match cond {
                 Value::Boolean(false) => {
+                    result = StatementResult::Normal; // fixes a bug that exists in the original implementation
                     break;
                 }
                 Value::Boolean(true) => {
@@ -268,11 +269,14 @@ impl InterpreterMutable {
             if let Some(cond_expr) = expr2 {
                 let cond = self.eval_expression(&cond_expr);
                 match cond {
-                    Value::Boolean(false) => break,
-                    Value::Boolean(true) => {}
-                    _ => {
-                        self.throw_runtime_error("expected a boolean type for the condition of `for`, but it was not.")
+                    Value::Boolean(false) => {
+                        result = StatementResult::Normal; // fixes a bug that exists in the original implementation
+                        break;
                     }
+                    Value::Boolean(true) => {}
+                    _ => self.throw_runtime_error(
+                        "expected a boolean type for the condition of `for`, but it was not.",
+                    ),
                 }
             }
             result = self.execute_statement_list(&block.0);
