@@ -109,10 +109,10 @@ impl InterpreterMutable {
 
         match statement {
             Statement::Expression(expr) => {
-                self.eval_optional_expression(&expr);
+                self.eval_optional_expression(expr);
             }
             Statement::Global(idents) => {
-                result = self.execute_global_statement(&idents);
+                result = self.execute_global_statement(idents);
             }
             Statement::If {
                 if_expr,
@@ -120,11 +120,11 @@ impl InterpreterMutable {
                 elsif_list,
                 else_block,
             } => {
-                result = self.execute_if_statement(&if_expr, &if_block, &elsif_list, &else_block);
+                result = self.execute_if_statement(if_expr, if_block, elsif_list, else_block);
             }
 
             Statement::While(expr, block) => {
-                result = self.execute_while_statement(&expr, &block);
+                result = self.execute_while_statement(expr, block);
             }
             Statement::Break => {
                 result = StatementResult::Break;
@@ -133,10 +133,10 @@ impl InterpreterMutable {
                 result = StatementResult::Continue;
             }
             Statement::For(expr1, expr2, expr3, block) => {
-                result = self.execute_for_statement(&expr1, &expr2, &expr3, &block);
+                result = self.execute_for_statement(expr1, expr2, expr3, block);
             }
             Statement::Return(expr) => {
-                let value: Option<Value> = self.eval_optional_expression(&expr);
+                let value: Option<Value> = self.eval_optional_expression(expr);
                 result = StatementResult::Return(value);
             }
         }
@@ -152,7 +152,7 @@ impl InterpreterMutable {
                 return result;
             }
         }
-        return result;
+        result
     }
 
     fn execute_global_statement(&mut self, idents: &[Ident]) -> StatementResult {
@@ -166,7 +166,7 @@ impl InterpreterMutable {
             }
         }
 
-        return result;
+        result
     }
 
     fn execute_elsif(
@@ -192,7 +192,7 @@ impl InterpreterMutable {
                 ),
             }
         }
-        return result;
+        result
     }
 
     fn execute_if_statement(
@@ -202,7 +202,7 @@ impl InterpreterMutable {
         elsif_list: &[(Expr, Block)],
         else_block: &Option<Block>,
     ) -> StatementResult {
-        let mut result = StatementResult::Normal;
+        let mut result;
         let cond = self.eval_expression(if_expr);
         match cond {
             Value::Boolean(false) => {
@@ -225,10 +225,10 @@ impl InterpreterMutable {
                 "expected a boolean type for the condition of `if`, but it was not.",
             ),
         }
-        return result;
+        result
     }
     fn execute_while_statement(&mut self, expr: &Expr, block: &Block) -> StatementResult {
-        let mut result = StatementResult::Normal;
+        let mut result;
         loop {
             let cond = self.eval_expression(expr);
             match cond {
@@ -261,13 +261,13 @@ impl InterpreterMutable {
         expr3: &Option<Expr>,
         block: &Block,
     ) -> StatementResult {
-        let mut result = StatementResult::Normal;
+        let mut result;
         if let Some(initial_expr) = expr1 {
-            let _1 = self.eval_expression(&initial_expr);
+            let _initial: Value = self.eval_expression(initial_expr);
         }
         loop {
             if let Some(cond_expr) = expr2 {
-                let cond = self.eval_expression(&cond_expr);
+                let cond = self.eval_expression(cond_expr);
                 match cond {
                     Value::Boolean(false) => {
                         result = StatementResult::Normal; // fixes a bug that exists in the original implementation
@@ -294,7 +294,7 @@ impl InterpreterMutable {
                 let _3 = self.eval_expression(post_expr);
             }
         }
-        return result;
+        result
     }
 
     fn throw_runtime_error(&self, msg: &str) -> ! {
