@@ -2,19 +2,10 @@
 fn test1() {
     use crate::lex::Ident;
 
-    let src = r#"for (i = 1; i <= 100; i = i + 1) {
-	if (i % 15 == 0) {
-		print("FizzBuzz\n");
-	} elsif (i % 3 == 0) {
-		print("Fizz\n");
-	} elsif (i % 5 == 0) {
-		print("Buzz\n");
-	} else {
-		print("" + i + "\n");
-	}
-}"#;
+    let src = include_str!("../fizzbuzz.crowbar");
     let lexed = crate::lex::lex(src);
     {
+        // lex
         use crate::lex::Token::{
             Add, Assign, Else, Elsif, Equal, For, Identifier, If, IntLiteral, LeftCurly, LeftParen,
             LessThanOrEqual, Mod, RightCurly, RightParen, Semicolon, StringLiteral,
@@ -101,6 +92,7 @@ fn test1() {
         );
     }
     {
+        // parse
         use crate::lex::Ident;
         use crate::parse::Expr::{
             Add, Assign, Equal, FunctionCall, Identifier, IntLiteral, LessThanOrEqual, Mod,
@@ -182,25 +174,7 @@ fn test1() {
 #[test]
 fn test2() {
     use crate::lex::Ident;
-    let src = r##"
-a = 10;
-
-function func() {
-	global a;
-	a = 20;
-}
-
-function func2() {
-	a = 30;
-	print("a.." + a + "\n");
-}
-
-func();
-func2();
-print("a.." + a + "\n");
-
-b = 3.2;
-print("b.." + b + "\n");"##;
+    let src = include_str!("../global_versus_local.crowbar");
     let lexed = crate::lex::lex(src);
     {
         use crate::lex::Token::{

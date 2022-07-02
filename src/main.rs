@@ -1,18 +1,7 @@
 use crowbarlang_in_rust::execute::Interpreter;
-fn main() {
-    let mut interpreter = Interpreter::compile_from_str(
-        r#"for (i = 1; i <= 100; i = i + 1) {
-	if (i % 15 == 0) {
-		print("FizzBuzz\n");
-	} elsif (i % 3 == 0) {
-		print("Fizz\n");
-	} elsif (i % 5 == 0) {
-		print("Buzz\n");
-	} else {
-		print("" + i + "\n");
-	}
-}"#,
-    );
-
+fn main() -> std::io::Result<()> {
+    let fizzbuzz = std::fs::File::open("global_versus_local.crowbar")?;
+    let mut interpreter = Interpreter::compile(fizzbuzz)?;
     interpreter.interpret();
+	Ok(())
 }
