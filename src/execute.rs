@@ -50,7 +50,7 @@ pub struct InterpreterImmutable {
     statement_list: Vec<Statement>,
 }
 
-pub enum NativeFuncContent {}
+type NativeFuncContent = Box<dyn Fn(&[Value]) -> Value>;
 
 pub enum FuncDef {
     Crowbar(CrowbarFuncDef),
@@ -59,13 +59,12 @@ pub enum FuncDef {
 
 pub struct NativeFuncDef {
     pub func_name: Ident,
-    pub params: Vec<()>,
     pub content: NativeFuncContent,
 }
 
 pub struct Interpreter {
     mutable: MutableEnvironment,
-    immutable: InterpreterImmutable,
+    src: InterpreterImmutable,
 }
 impl Interpreter {
     pub fn compile(file: std::fs::File) -> std::io::Result<Self> {
@@ -95,7 +94,7 @@ impl Interpreter {
         }
 
         Self {
-            immutable: InterpreterImmutable {
+            src: InterpreterImmutable {
                 function_list,
                 statement_list,
             },
@@ -107,19 +106,58 @@ impl Interpreter {
     }
 
     pub fn interpret(&mut self) {
-        self.add_std_fp();
-        self.mutable.execute_statement_list(
-            &self.immutable.function_list,
-            &self.immutable.statement_list,
-        );
+        self.add_std_file_pointers();
+        self.add_std_native_functions();
+        self.mutable
+            .execute_statement_list(&self.src.function_list, &self.src.statement_list);
+    }
+
+    fn add_std_native_functions(&mut self) {
+        self.add_native_function(
+            "print",
+            Box::new(|args| {
+                match args {
+                    [Value::Boolean(b)] => print!("{}", b),
+                    [Value::Int(b)] => print!("{}", b),
+                    [Value::Double(b)] => print!("{}", b),
+                    [Value::String(b)] => print!("{}", b),
+                    [Value::NativePointer(b)] => print!("{}", b),
+                    [Value::Null] => print!("null"),
+                    [] => panic!(
+                        "Expected 1 argument to the native function `print`, but got 0 arguments.",
+                    ),
+                    [_, _, ..] => panic!(
+                        "Expected 1 argument to the native function `print`, but got {} arguments.",
+                        args.len()
+                    ),
+                };
+                Value::Null
+            }),
+        )
     }
 
     pub fn add_native_function(&mut self, name: &str, content: NativeFuncContent) {
-        todo!()
+        self.src.function_list.push(FuncDef::Native(NativeFuncDef {
+            func_name: Ident::from(name),
+            content,
+        }))
     }
 
-    fn add_std_fp(&mut self) {
-        todo!()
+    fn add_std_file_pointers(&mut self) {
+        self.mutable.global_variables.append(&mut vec![
+            Variable {
+                name: Ident::from("STDIN"),
+                value: Value::NativePointer(NativePointer {}),
+            },
+            Variable {
+                name: Ident::from("STDOUT"),
+                value: Value::NativePointer(NativePointer {}),
+            },
+            Variable {
+                name: Ident::from("STDERR"),
+                value: Value::NativePointer(NativePointer {}),
+            },
+        ]);
     }
 }
 
@@ -437,14 +475,19 @@ impl MutableEnvironment {
         self.throw_runtime_error(&format!("Cannot find a function named `{}`", ident.name()))
     }
 
-    fn call_crowbar_function(&mut self, funcs: &[FuncDef], f: &CrowbarFuncDef, args: &[Expr]) -> Value {
+    fn call_crowbar_function(
+        &mut self,
+        funcs: &[FuncDef],
+        f: &CrowbarFuncDef,
+        args: &[Expr],
+    ) -> Value {
         let mut local_env: LocalEnvironment = Default::default();
         if f.params.len() != args.len() {
             self.throw_runtime_error(&format!("Mismatch: the number of arguments passed is {} while the number of parameters is {}", args.len(), f.params.len()))
         }
         for (i, arg) in args.iter().enumerate() {
-            let arg_val = self.eval_expression(funcs, arg);  
-            local_env.add_local_variable_and_set(&f.params[i], &arg_val); 
+            let arg_val = self.eval_expression(funcs, arg);
+            local_env.add_local_variable_and_set(&f.params[i], &arg_val);
         }
 
         let mut env = Some(local_env);
@@ -459,12 +502,22 @@ impl MutableEnvironment {
 
         match result {
             StatementResult::Return(Some(value)) => value,
-            _ => Value::Null 
+            _ => Value::Null,
         }
     }
 
-    fn call_native_function(&mut self, funcs: &[FuncDef], f: &NativeFuncDef, args: &[Expr]) -> Value {
-        todo!()
+    fn call_native_function(
+        &mut self,
+        funcs: &[FuncDef],
+        f: &NativeFuncDef,
+        args: &[Expr],
+    ) -> Value {
+        let mut arg_vals = vec![];
+        for arg in args {
+            arg_vals.push(self.eval_expression(funcs, arg));
+        }
+
+        (f.content)(&arg_vals)
     }
 
     fn eval_negative_expression(&mut self, funcs: &[FuncDef], expr: &Expr) -> Value {

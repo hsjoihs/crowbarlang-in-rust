@@ -15,5 +15,4 @@ fn main() {
     );
 
     interpreter.interpret();
-    println!("Hello, world!");
 }

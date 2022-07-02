@@ -432,7 +432,6 @@ impl<'a> ParserState<'a> {
             }
             Some(Token::Function) => panic!("This should not be handled by parse_statement"),
             _ => {
-                dbg!(&self.tokvec);
                 let expr = parse_optional_expression_and_a_token!(
                     self,
                     Token::Semicolon,
