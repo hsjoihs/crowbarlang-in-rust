@@ -430,7 +430,7 @@ impl<'a> ParserState<'a> {
                     else_block: None,
                 };
             }
-            Some(Token::Function) => todo!("`function` is not yet implemented"),
+            Some(Token::Function) => panic!("This should not be handled by parse_statement"),
             _ => {
                 dbg!(&self.tokvec);
                 let expr = parse_optional_expression_and_a_token!(
