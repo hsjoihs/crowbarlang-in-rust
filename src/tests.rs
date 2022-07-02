@@ -2,7 +2,7 @@
 fn test1() {
     use crate::lex::Ident;
 
-    let src = include_str!("../fizzbuzz.crowbar");
+    let src = include_str!("../fizzbuzz.crb");
     let lexed = crate::lex::lex(src);
     {
         // lex
@@ -174,7 +174,7 @@ fn test1() {
 #[test]
 fn test2() {
     use crate::lex::Ident;
-    let src = include_str!("../global_versus_local.crowbar");
+    let src = include_str!("../global_versus_local.crb");
     let lexed = crate::lex::lex(src);
     {
         use crate::lex::Token::{
@@ -257,11 +257,11 @@ fn test2() {
     let parsed = crate::parse::translation_unit(&lexed);
     {
         use crate::lex::Ident;
+        use crate::parse::CrowbarFuncDef;
         use crate::parse::DefinitionOrStatement::{Definition, Statement};
         use crate::parse::Expr::{
             Add, Assign, DoubleLiteral, FunctionCall, Identifier, IntLiteral, StringLiteral,
         };
-        use crate::parse::CrowbarFuncDef;
         use crate::parse::Statement::{Expression, Global};
         assert_eq!(
             parsed,

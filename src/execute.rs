@@ -19,13 +19,16 @@ pub enum Value {
     NativePointer(NativePointer),
     Null,
 }
-#[derive(PartialEq, Debug, Clone, Copy)]
-pub struct NativePointer {}
-
-impl std::fmt::Display for NativePointer {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        todo!()
-    }
+#[derive(PartialEq, Debug, Clone)]
+pub enum NativePointer {
+    FilePointer(FilePointer),
+}
+#[derive(PartialEq, Debug, Clone)]
+pub enum FilePointer {
+    RawPointer(*mut libc::FILE),
+    StdIn,
+    StdOut,
+    StdErr,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -60,6 +63,19 @@ pub enum FuncDef {
 pub struct NativeFuncDef {
     pub func_name: Ident,
     pub content: NativeFuncContent,
+}
+
+impl std::fmt::Display for Value {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            Value::Boolean(b) => write!(f, "{}", b),
+            Value::Int(b) => write!(f, "{}", b),
+            Value::Double(b) => write!(f, "{}", b),
+            Value::String(b) => write!(f, "{}", b),
+            Value::NativePointer(b) => write!(f, "(NativePointer:{:?})", b),
+            Value::Null => write!(f, "null"),
+        }
+    }
 }
 
 pub struct Interpreter {
@@ -119,12 +135,7 @@ impl Interpreter {
             "print",
             Box::new(|args| {
                 match args {
-                    [Value::Boolean(b)] => print!("{}", b),
-                    [Value::Int(b)] => print!("{}", b),
-                    [Value::Double(b)] => print!("{}", b),
-                    [Value::String(b)] => print!("{}", b),
-                    [Value::NativePointer(b)] => print!("{}", b),
-                    [Value::Null] => print!("null"),
+                    [arg] => print!("{}", arg),
                     [] => panic!(
                         "Expected 1 argument to the native function `print`, but got 0 arguments.",
                     ),
@@ -134,6 +145,140 @@ impl Interpreter {
                     ),
                 };
                 Value::Null
+            }),
+        );
+        self.add_native_function(
+            "fopen",
+            Box::new(|args| match args {
+                [Value::String(filename), Value::String(mode)] => {
+                    use std::ffi::CString;
+                    let filename = CString::new(filename as &str).unwrap();
+                    let mode = CString::new(mode as &str).unwrap();
+                    let fp = unsafe { libc::fopen(filename.as_ptr(), mode.as_ptr()) };
+                    Value::NativePointer(NativePointer::FilePointer(FilePointer::RawPointer(fp)))
+                }
+                [_, Value::String(_)] => panic!("The first argument to fopen() is not a string"),
+                [Value::String(_), _] => panic!("The second argument to fopen() is not a string"),
+                [_, _] => panic!("The first and the second argument to fopen() are not strings"),
+                _ => panic!(
+                    "Expected 2 arguments to the native function `fopen`, but got {} arguments.",
+                    args.len()
+                ),
+            }),
+        );
+        self.add_native_function(
+            "fclose",
+            Box::new(|args| match args {
+                [Value::NativePointer(NativePointer::FilePointer(fp))] => {
+                    match fp {
+                        FilePointer::RawPointer(fp) => unsafe {
+                            libc::fclose(*fp);
+                        },
+
+                        // It is an undefined behavior to use stdin, stdout or stderr
+                        // after when they are closed.
+                        // That means it's simply fine to ignore an attempt to call
+                        // `fclose()` on them.
+                        FilePointer::StdIn | FilePointer::StdOut | FilePointer::StdErr => {
+                            /* do nothing */
+                        }
+                    }
+                    Value::Null
+                }
+                [_] => panic!("The first argument to fclose() is not a file pointer"),
+                _ => panic!(
+                    "Expected 1 argument to the native function `fclose`, but got {} arguments.",
+                    args.len()
+                ),
+            }),
+        );
+
+        self.add_native_function(
+            "fgets",
+            Box::new(|args| match args {
+                [arg @ Value::NativePointer(NativePointer::FilePointer(fp))] => match fp {
+                    FilePointer::RawPointer(fp) => {
+                        let mut ret_buf: Vec<u8> = Vec::new();
+                        let mut buf: [std::os::raw::c_char; 1024] = [0; 1024];
+
+                        unsafe {
+                            while !libc::fgets(std::ptr::addr_of_mut!(buf[0]), 1024, *fp).is_null()
+                            {
+                                let len = libc::strlen(std::ptr::addr_of_mut!(buf[0]));
+                                for c in buf.iter().take(len) {
+                                    #[allow(clippy::cast_sign_loss)]
+                                    ret_buf.push(*c as u8);
+                                }
+                                if ret_buf.last() == Some(&b'\n') {
+                                    break;
+                                }
+                            }
+                        }
+
+                        let str = std::ffi::CString::new(ret_buf)
+                            .unwrap()
+                            .to_string_lossy()
+                            .to_string();
+
+                        if str.is_empty() {
+                            Value::Null
+                        } else {
+                            Value::String(str)
+                        }
+                    }
+
+                    FilePointer::StdOut | FilePointer::StdErr => {
+                        panic!("Cannot read from a write-only file pointer `{}`", arg);
+                    }
+
+                    FilePointer::StdIn => {
+                        use std::io::BufRead;
+                        let mut line = String::new();
+                        let stdin = std::io::stdin();
+                        let mut stdinlock = stdin.lock();
+                        match stdinlock.read_line(&mut line).unwrap() {
+                            0 => Value::Null,
+                            _ => Value::String(line),
+                        }
+                    }
+                },
+                [_] => panic!("The first argument to fgets() is not a file pointer"),
+                _ => panic!(
+                    "Expected 1 argument to the native function `fgets`, but got {} arguments.",
+                    args.len()
+                ),
+            }),
+        );
+
+        self.add_native_function(
+            "fputs",
+            Box::new(|args| match args {
+                [Value::String(str), arg@ Value::NativePointer(NativePointer::FilePointer(fp))] => {
+                    match fp {
+                        FilePointer::StdIn => {
+                             panic!("Cannot write to a read-only file pointer `{}`", arg);
+                        }
+                        FilePointer::RawPointer(fp) => {
+                            let c_to_print = std::ffi::CString::new(str as &str).unwrap();
+                            unsafe {
+                                libc::fputs(c_to_print.as_ptr(), *fp);
+                            }
+                        },
+
+                        FilePointer::StdOut => {
+                            print!("{}", str);
+                        }
+                        FilePointer::StdErr => {
+                            eprint!("{}", str);
+                        }
+                    }
+                    Value::Null
+                }
+                [_] => panic!("The first argument to fclose() is not a file pointer"),
+                _ => panic!(
+                    "Expected 1 argument to the native function `fclose`, but got {} arguments.",
+                    args.len()
+                ),
             }),
         );
     }
@@ -149,15 +294,15 @@ impl Interpreter {
         self.mutable.global_variables.append(&mut vec![
             Variable {
                 name: Ident::from("STDIN"),
-                value: Value::NativePointer(NativePointer {}),
+                value: Value::NativePointer(NativePointer::FilePointer(FilePointer::StdIn)),
             },
             Variable {
                 name: Ident::from("STDOUT"),
-                value: Value::NativePointer(NativePointer {}),
+                value: Value::NativePointer(NativePointer::FilePointer(FilePointer::StdOut)),
             },
             Variable {
                 name: Ident::from("STDERR"),
-                value: Value::NativePointer(NativePointer {}),
+                value: Value::NativePointer(NativePointer::FilePointer(FilePointer::StdErr)),
             },
         ]);
     }
@@ -237,7 +382,7 @@ impl MutableEnvironment {
         right: &Expr,
     ) -> Value {
         use BinOp::{Add, Cmp, Eq, Numerical};
-        use Value::{Boolean, Double, Int, NativePointer, Null, String};
+        use Value::{Boolean, Double, Int, Null, String};
         let left_val = self.eval_expression(funcs, left);
         let right_val = self.eval_expression(funcs, right);
         match (left_val, right_val, op) {
@@ -249,12 +394,7 @@ impl MutableEnvironment {
             (Int(l), Double(r), _) => eval_binary_double(op, f64::from(l), r),
             (Double(l), Int(r), _) => eval_binary_double(op, l, f64::from(r)),
             (Boolean(l), Boolean(r), Eq(e)) => e.eval(&l, &r),
-            (String(l), Int(r), BinOp::Add) => Value::String(format!("{}{}", l, r)),
-            (String(l), Double(r), BinOp::Add) => Value::String(format!("{}{}", l, r)),
-            (String(l), Boolean(r), BinOp::Add) => Value::String(format!("{}{}", l, r)),
-            (String(l), String(r), BinOp::Add) => Value::String(format!("{}{}", l, r)),
-            (String(l), NativePointer(r), BinOp::Add) => Value::String(format!("{}{}", l, r)),
-            (String(l), Null, BinOp::Add) => Value::String(format!("{}null", l)),
+            (String(l), r, BinOp::Add) => Value::String(format!("{}{}", l, r)),
             (String(l), String(r), BinOp::Cmp(c)) => c.eval(&l, &r),
             (String(l), String(r), BinOp::Eq(c)) => c.eval(&l, &r),
             (Null, Null, Eq(e)) => e.eval(&Null, &Null),
