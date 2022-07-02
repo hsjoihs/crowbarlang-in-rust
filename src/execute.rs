@@ -67,6 +67,8 @@ pub struct Interpreter {
     src: InterpreterImmutable,
 }
 impl Interpreter {
+    /// # Errors
+    /// Gives out an IO error when it fails to read from the file
     pub fn compile(file: std::fs::File) -> std::io::Result<Self> {
         use std::io::prelude::*;
         use std::io::BufReader;
@@ -133,14 +135,14 @@ impl Interpreter {
                 };
                 Value::Null
             }),
-        )
+        );
     }
 
     pub fn add_native_function(&mut self, name: &str, content: NativeFuncContent) {
         self.src.function_list.push(FuncDef::Native(NativeFuncDef {
             func_name: Ident::from(name),
             content,
-        }))
+        }));
     }
 
     fn add_std_file_pointers(&mut self) {
@@ -214,15 +216,15 @@ fn test_set_local_var() {
             }],
             global_variables_visible_from_local: vec![],
         })
-    )
+    );
 }
 
 impl LocalEnvironment {
-    fn add_local_variable_and_set(&mut self, ident: &Ident, v: &Value) -> () {
+    fn add_local_variable_and_set(&mut self, ident: &Ident, v: &Value) {
         self.local_variables.push(Variable {
             name: ident.clone(),
             value: v.clone(),
-        })
+        });
     }
 }
 
@@ -234,28 +236,28 @@ impl MutableEnvironment {
         left: &Expr,
         right: &Expr,
     ) -> Value {
-        use BinOp::*;
-        use Value::*;
+        use BinOp::{Add, Cmp, Eq, Numerical};
+        use Value::{Boolean, Double, Int, NativePointer, Null, String};
         let left_val = self.eval_expression(funcs, left);
         let right_val = self.eval_expression(funcs, right);
         match (left_val, right_val, op) {
             (Int(l), Int(r), Add) => Value::Int(l + r),
             (Int(l), Int(r), Numerical(o)) => eval_int_numerics(o, l, r),
-            (Int(l), Int(r), Cmp(c)) => c.eval(l, r),
-            (Int(l), Int(r), Eq(e)) => e.eval(l, r),
+            (Int(l), Int(r), Cmp(c)) => c.eval(&l, &r),
+            (Int(l), Int(r), Eq(e)) => e.eval(&l, &r),
             (Double(l), Double(r), _) => eval_binary_double(op, l, r),
-            (Int(l), Double(r), _) => eval_binary_double(op, l as f64, r),
-            (Double(l), Int(r), _) => eval_binary_double(op, l, r as f64),
-            (Boolean(l), Boolean(r), Eq(e)) => e.eval(l, r),
+            (Int(l), Double(r), _) => eval_binary_double(op, f64::from(l), r),
+            (Double(l), Int(r), _) => eval_binary_double(op, l, f64::from(r)),
+            (Boolean(l), Boolean(r), Eq(e)) => e.eval(&l, &r),
             (String(l), Int(r), BinOp::Add) => Value::String(format!("{}{}", l, r)),
             (String(l), Double(r), BinOp::Add) => Value::String(format!("{}{}", l, r)),
             (String(l), Boolean(r), BinOp::Add) => Value::String(format!("{}{}", l, r)),
             (String(l), String(r), BinOp::Add) => Value::String(format!("{}{}", l, r)),
             (String(l), NativePointer(r), BinOp::Add) => Value::String(format!("{}{}", l, r)),
             (String(l), Null, BinOp::Add) => Value::String(format!("{}null", l)),
-            (String(l), String(r), BinOp::Cmp(c)) => c.eval(l, r),
-            (String(l), String(r), BinOp::Eq(c)) => c.eval(l, r),
-            (Null, Null, Eq(e)) => e.eval(Null, Null),
+            (String(l), String(r), BinOp::Cmp(c)) => c.eval(&l, &r),
+            (String(l), String(r), BinOp::Eq(c)) => c.eval(&l, &r),
+            (Null, Null, Eq(e)) => e.eval(&Null, &Null),
             _ => self.throw_runtime_error(&format!(
                 "Invalid operation made using the operator `{:?}`",
                 op
@@ -265,14 +267,17 @@ impl MutableEnvironment {
 
     fn eval_assign_expression(&mut self, funcs: &[FuncDef], ident: &Ident, right: &Expr) -> Value {
         let v = self.eval_expression(funcs, right);
-        if let Some(_) = self.search_local_variable_and_set(ident, &v) {
-        } else if let Some(_) = self.search_global_variable_from_local_env_and_set(ident, &v) {
+        if self.search_local_variable_and_set(ident, &v).is_some()
+            || self
+                .search_global_variable_from_local_env_and_set(ident, &v)
+                .is_some()
+        {
         } else if let Some(env) = &mut self.local_environment {
             env.add_local_variable_and_set(ident, &v);
         } else {
             self.add_global_variable_and_set(ident, &v);
         }
-        return v;
+        v
     }
     fn eval_expression(&mut self, funcs: &[FuncDef], expr: &Expr) -> Value {
         match expr {
@@ -280,7 +285,7 @@ impl MutableEnvironment {
             Expr::LogicalOr(left, right) => {
                 let left_val = self.eval_expression(funcs, left);
                 match left_val {
-                    Value::Boolean(true) =>{ return Value::Boolean(true) },
+                    Value::Boolean(true) =>{ Value::Boolean(true) },
                     Value::Boolean(false) =>{
                         let right_val = self.eval_expression(funcs, right);
                         match right_val {
@@ -296,7 +301,7 @@ impl MutableEnvironment {
             Expr::LogicalAnd(left, right) => {
                 let left_val = self.eval_expression(funcs, left);
                 match left_val {
-                    Value::Boolean(false) =>{ return Value::Boolean(false) },
+                    Value::Boolean(false) =>{ Value::Boolean(false) },
                     Value::Boolean(true) =>{
                         let right_val = self.eval_expression(funcs, right);
                         match right_val {
@@ -362,20 +367,19 @@ impl MutableEnvironment {
                 return Some(gv.clone());
             }
         }
-        return None;
+        None
     }
 
     fn search_global_variable_from_local_env(&self, ident: &Ident) -> Option<Variable> {
-        match &self.local_environment {
-            None => self.search_global_variable(ident),
-            Some(env) => {
-                for gvname in &env.global_variables_visible_from_local {
-                    if gvname == ident {
-                        return self.search_global_variable(ident);
-                    }
+        if let Some(env) = &self.local_environment {
+            for gvname in &env.global_variables_visible_from_local {
+                if gvname == ident {
+                    return self.search_global_variable(ident);
                 }
-                return None;
             }
+            None
+        } else {
+            self.search_global_variable(ident)
         }
     }
 
@@ -384,16 +388,15 @@ impl MutableEnvironment {
         ident: &Ident,
         value: &Value,
     ) -> Option<()> {
-        match &mut self.local_environment {
-            None => self.search_global_variable_and_set(ident, &value),
-            Some(env) => {
-                for gvname in &mut env.global_variables_visible_from_local {
-                    if gvname == ident {
-                        return self.search_global_variable_and_set(ident, &value);
-                    }
+        if let Some(env) = &mut self.local_environment {
+            for gvname in &mut env.global_variables_visible_from_local {
+                if gvname == ident {
+                    return self.search_global_variable_and_set(ident, value);
                 }
-                return None;
             }
+            None
+        } else {
+            self.search_global_variable_and_set(ident, value)
         }
     }
 
@@ -404,7 +407,7 @@ impl MutableEnvironment {
                 return Some(());
             }
         }
-        return None;
+        None
     }
 
     fn eval_ident_expression(&mut self, ident: &Ident) -> Value {
@@ -418,38 +421,36 @@ impl MutableEnvironment {
     }
 
     fn search_local_variable(&self, ident: &Ident) -> Option<Variable> {
-        match &self.local_environment {
-            None => None,
-            Some(env) => {
-                for lv in &env.local_variables {
-                    if &lv.name == ident {
-                        return Some(lv.clone());
-                    }
+        if let Some(env) = &self.local_environment {
+            for lv in &env.local_variables {
+                if &lv.name == ident {
+                    return Some(lv.clone());
                 }
-                return None;
             }
+            None
+        } else {
+            None
         }
     }
 
     fn search_local_variable_and_set(&mut self, ident: &Ident, value: &Value) -> Option<()> {
-        match &mut self.local_environment {
-            None => None,
-            Some(env) => {
-                for lv in &mut env.local_variables {
-                    if &lv.name == ident {
-                        lv.value = value.clone();
-                    }
+        if let Some(env) = &mut self.local_environment {
+            for lv in &mut env.local_variables {
+                if &lv.name == ident {
+                    lv.value = value.clone();
                 }
-                return None;
             }
+            None
+        } else {
+            None
         }
     }
 
-    fn add_global_variable_and_set(&mut self, ident: &Ident, v: &Value) -> () {
+    fn add_global_variable_and_set(&mut self, ident: &Ident, v: &Value) {
         self.global_variables.push(Variable {
             name: ident.clone(),
             value: v.clone(),
-        })
+        });
     }
 
     fn eval_funccall_expression(
@@ -481,7 +482,7 @@ impl MutableEnvironment {
         f: &CrowbarFuncDef,
         args: &[Expr],
     ) -> Value {
-        let mut local_env: LocalEnvironment = Default::default();
+        let mut local_env = LocalEnvironment::default();
         if f.params.len() != args.len() {
             self.throw_runtime_error(&format!("Mismatch: the number of arguments passed is {} while the number of parameters is {}", args.len(), f.params.len()))
         }
@@ -535,11 +536,7 @@ impl MutableEnvironment {
         funcs: &[FuncDef],
         expr: &Option<Expr>,
     ) -> Option<Value> {
-        if let Some(expr) = expr {
-            Some(self.eval_expression(funcs, expr))
-        } else {
-            None
-        }
+        expr.as_ref().map(|expr| self.eval_expression(funcs, expr))
     }
 
     fn execute_statement(&mut self, funcs: &[FuncDef], statement: &Statement) -> StatementResult {
@@ -604,7 +601,7 @@ impl MutableEnvironment {
             None => self.throw_runtime_error("`global` statement found in top-level"),
             Some(env) => {
                 for ident in idents {
-                    env.global_variables_visible_from_local.push(ident.clone())
+                    env.global_variables_visible_from_local.push(ident.clone());
                 }
             }
         }
@@ -741,7 +738,7 @@ impl MutableEnvironment {
             }
 
             if let Some(post_expr) = expr3 {
-                let _3 = self.eval_expression(funcs, post_expr);
+                let _final = self.eval_expression(funcs, post_expr);
             }
         }
         result
@@ -753,7 +750,7 @@ impl MutableEnvironment {
 }
 
 impl EqOp {
-    fn eval<T: PartialEq>(self, l: T, r: T) -> Value {
+    fn eval<T: PartialEq>(self, l: &T, r: &T) -> Value {
         Value::Boolean(match self {
             EqOp::Equal => l == r,
             EqOp::NotEqual => l != r,
@@ -762,7 +759,7 @@ impl EqOp {
 }
 
 impl CmpOp {
-    fn eval<T: PartialOrd>(self, l: T, r: T) -> Value {
+    fn eval<T: PartialOrd>(self, l: &T, r: &T) -> Value {
         Value::Boolean(match self {
             CmpOp::GreaterThan => l > r,
             CmpOp::GreaterThanOrEqual => l >= r,
@@ -781,12 +778,12 @@ fn eval_binary_double(o: BinOp, l: f64, r: f64) -> Value {
             NumOp::Div => l / r,
             NumOp::Mod => l % r,
         }),
-        BinOp::Eq(e) => e.eval(l, r),
-        BinOp::Cmp(c) => c.eval(l, r),
+        BinOp::Eq(e) => e.eval(&l, &r),
+        BinOp::Cmp(c) => c.eval(&l, &r),
     }
 }
 
-fn eval_int_numerics(o: NumOp, l: i32, r: i32) -> Value {
+const fn eval_int_numerics(o: NumOp, l: i32, r: i32) -> Value {
     Value::Int(match o {
         NumOp::Sub => l - r,
         NumOp::Mul => l * r,

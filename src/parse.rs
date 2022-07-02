@@ -300,7 +300,7 @@ impl<'a> ParserState<'a> {
                     Token::Semicolon,
                     "semicolon at the end of `global` statement"
                 );
-                return Statement::Global(idents);
+                Statement::Global(idents)
             }
             Some(Token::While) => {
                 self.advance(1);
@@ -316,7 +316,7 @@ impl<'a> ParserState<'a> {
                     "a closing parenthesis of a `while` statement"
                 );
                 let block = self.parse_block();
-                return Statement::While(expr, block);
+                Statement::While(expr, block)
             }
             Some(Token::Continue) => {
                 self.advance(1);
@@ -325,7 +325,7 @@ impl<'a> ParserState<'a> {
                     Token::Semicolon,
                     "semicolon at the end of `continue` statement"
                 );
-                return Statement::Continue;
+                Statement::Continue
             }
             Some(Token::Break) => {
                 self.advance(1);
@@ -334,7 +334,7 @@ impl<'a> ParserState<'a> {
                     Token::Semicolon,
                     "semicolon at the end of `break` statement"
                 );
-                return Statement::Break;
+                Statement::Break
             }
             Some(Token::Return) => {
                 self.advance(1);
@@ -367,7 +367,7 @@ impl<'a> ParserState<'a> {
                     "a closing parenthesis after the third argument to `for`"
                 );
                 let block = self.parse_block();
-                return Statement::For(expr1, expr2, expr3, block);
+                Statement::For(expr1, expr2, expr3, block)
             }
             Some(Token::If) => {
                 self.advance(1);
@@ -423,12 +423,12 @@ impl<'a> ParserState<'a> {
                     };
                 }
 
-                return Statement::If {
+                Statement::If {
                     if_expr,
                     if_block,
                     elsif_list,
                     else_block: None,
-                };
+                }
             }
             Some(Token::Function) => panic!("This should not be handled by parse_statement"),
             _ => {
@@ -438,7 +438,7 @@ impl<'a> ParserState<'a> {
                     "a semicolon after expression"
                 );
 
-                return Statement::Expression(expr);
+                Statement::Expression(expr)
             }
         }
     }
@@ -500,10 +500,10 @@ impl<'a> ParserState<'a> {
         parse_relational_expression,
         parse_additive_expression,
         Token::GreaterThan | Token::GreaterThanOrEqual | Token::LessThan | Token::LessThanOrEqual,
-        |t| match t {
-            &Token::GreaterThan => Expr::GreaterThan,
-            &Token::GreaterThanOrEqual => Expr::GreaterThanOrEqual,
-            &Token::LessThan => Expr::LessThan,
+        |t: &Token| match *t {
+            Token::GreaterThan => Expr::GreaterThan,
+            Token::GreaterThanOrEqual => Expr::GreaterThanOrEqual,
+            Token::LessThan => Expr::LessThan,
             _ => Expr::LessThanOrEqual,
         }
     }
@@ -521,9 +521,9 @@ impl<'a> ParserState<'a> {
         parse_multiplicative_expression,
         parse_unary_expression,
         Token::Mul | Token::Div | Token::Mod,
-        |t| match t {
-            &Token::Mul => Expr::Mul,
-            &Token::Div => Expr::Div,
+        |t: &Token| match t {
+            Token::Mul => Expr::Mul,
+            Token::Div => Expr::Div,
             _ => Expr::Mod,
         }
     }

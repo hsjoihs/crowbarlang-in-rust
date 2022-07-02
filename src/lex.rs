@@ -43,6 +43,7 @@ pub enum Token {
 pub struct Ident(String);
 
 impl Ident {
+    #[must_use]
     pub fn name(&self) -> &str {
         &self.0
     }
