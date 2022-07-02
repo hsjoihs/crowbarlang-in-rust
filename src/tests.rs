@@ -1,4 +1,3 @@
-
 #[test]
 fn test1() {
     use crate::lex::Ident;

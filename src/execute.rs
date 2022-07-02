@@ -10,7 +10,7 @@ pub enum StatementResult {
     Break,
     Continue,
 }
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Clone)]
 pub enum Value {
     Boolean(bool),
     Int(i32),
@@ -19,17 +19,35 @@ pub enum Value {
     NativePointer(NativePointer),
     Null,
 }
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Clone, Copy)]
 pub struct NativePointer {}
 
+#[derive(Clone, Debug, PartialEq)]
 struct Variable {
-    name: String,
+    name: Ident,
     value: Value,
 }
 
-pub struct InterpreterMutable {
-    variables: Vec<Variable>,
-    local_environment: Option<Vec<Variable>>,
+pub struct MutableEnvironment {
+    local_environment: Option<LocalEnvironment>,
+    global_variables: Vec<Variable>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct LocalEnvironment {
+    local_variables: Vec<Variable>,
+    global_variables_visible_from_local: Vec<Ident>,
+}
+
+impl LocalEnvironment {
+    fn search_local_variable(&self, ident: &Ident) -> Option<Variable> {
+        for v in &self.local_variables {
+            if &v.name == ident {
+                return Some(v.clone());
+            }
+        }
+        return None;
+    }
 }
 
 pub struct InterpreterImmutable {
@@ -38,7 +56,7 @@ pub struct InterpreterImmutable {
 }
 
 pub struct Interpreter {
-    mutable: InterpreterMutable,
+    mutable: MutableEnvironment,
     immutable: InterpreterImmutable,
 }
 impl Interpreter {
@@ -73,8 +91,8 @@ impl Interpreter {
                 function_list,
                 statement_list,
             },
-            mutable: InterpreterMutable {
-                variables: vec![],
+            mutable: MutableEnvironment {
+                global_variables: vec![],
                 local_environment: None,
             },
         }
@@ -91,12 +109,266 @@ impl Interpreter {
     }
 }
 
-impl InterpreterMutable {
-    fn eval_expression(&mut self, expr: &Expr) -> Value {
+#[derive(Debug, Clone, Copy)]
+enum BinOp {
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Mod,
+    Equal,
+    NotEqual,
+    GreaterThan,
+    GreaterThanOrEqual,
+    LessThan,
+    LessThanOrEqual,
+}
+
+enum Function {
+    Crowbar(()),
+    Native(()),
+}
+
+#[test]
+fn test_set_local_var() {
+    let mut me = MutableEnvironment {
+        local_environment: Some(LocalEnvironment {
+            local_variables: vec![Variable {
+                name: Ident::from("foo"),
+                value: Value::Boolean(true),
+            }],
+            global_variables_visible_from_local: vec![],
+        }),
+        global_variables: vec![],
+    };
+
+    me.search_local_variable_and_set(&Ident::from("foo"), &Value::Boolean(false));
+    assert_eq!(
+        me.local_environment,
+        Some(LocalEnvironment {
+            local_variables: vec![Variable {
+                name: Ident::from("foo"),
+                value: Value::Boolean(false),
+            }],
+            global_variables_visible_from_local: vec![],
+        })
+    )
+}
+
+impl LocalEnvironment {
+    fn add_local_variable_and_set(&mut self, ident: &Ident, v: &Value) -> () {
+        self.local_variables.push(Variable {
+            name: ident.clone(),
+            value: v.clone(),
+        })
+    }
+}
+
+impl MutableEnvironment {
+    fn eval_binary_expression(&mut self, op: BinOp, left: &Expr, right: &Expr) -> Value {
         todo!()
     }
 
-    fn eval_optional_expression(&mut self, expr: &Option<Expr>) -> Option<Value> {
+    fn eval_assign_expression(&mut self, ident: &Ident, right: &Expr) -> Value {
+        let v = self.eval_expression(right);
+        if let Some(_) = self.search_local_variable_and_set(ident, &v) {
+        } else if let Some(_) = self.search_global_variable_from_local_env_and_set(ident, &v) {
+        } else if let Some(env) = &mut self.local_environment {
+            env.add_local_variable_and_set(ident, &v);
+        } else {
+            self.add_global_variable_and_set(ident, &v);
+        }
+        return v;
+    }
+    fn eval_expression(&mut self, expr: &Expr) -> Value {
+        match expr {
+            Expr::Assign(left, right) => self.eval_assign_expression(left, right),
+            Expr::LogicalOr(left, right) => {
+                let left_val = self.eval_expression(left);
+                match left_val {
+                    Value::Boolean(true) =>{ return Value::Boolean(true) },
+                    Value::Boolean(false) =>{
+                        let right_val = self.eval_expression(right);
+                        match right_val {
+                            a @ Value::Boolean(_) => a,
+                            _ => self.throw_runtime_error("expected a boolean type for the condition of the right side of `||`, but it was not."),
+                        }
+                    },
+                    _ => self.throw_runtime_error(
+                    "expected a boolean type for the condition of the left side of `||`, but it was not.",
+                ),
+                }
+            }
+            Expr::LogicalAnd(left, right) => {
+                let left_val = self.eval_expression(left);
+                match left_val {
+                    Value::Boolean(false) =>{ return Value::Boolean(false) },
+                    Value::Boolean(true) =>{
+                        let right_val = self.eval_expression(right);
+                        match right_val {
+                            a @ Value::Boolean(_) => a,
+                            _ => self.throw_runtime_error("expected a boolean type for the condition of the right side of `&&`, but it was not."),
+                        }
+                    },
+                    _ => self.throw_runtime_error(
+                    "expected a boolean type for the condition of the left side of `&&`, but it was not.",
+                ),
+                }
+            }
+            Expr::Null => Value::Null,
+            Expr::True => Value::Boolean(true),
+            Expr::False => Value::Boolean(false),
+            Expr::StringLiteral(s) => Value::String(s.clone()),
+            Expr::DoubleLiteral(d) => Value::Double(*d),
+            Expr::IntLiteral(i) => Value::Int(*i),
+            Expr::Add(left, right) => self.eval_binary_expression(BinOp::Add, left, right),
+            Expr::Sub(left, right) => self.eval_binary_expression(BinOp::Sub, left, right),
+            Expr::Mul(left, right) => self.eval_binary_expression(BinOp::Mul, left, right),
+            Expr::Div(left, right) => self.eval_binary_expression(BinOp::Div, left, right),
+            Expr::Mod(left, right) => self.eval_binary_expression(BinOp::Mod, left, right),
+            Expr::Equal(left, right) => self.eval_binary_expression(BinOp::Equal, left, right),
+            Expr::NotEqual(left, right) => {
+                self.eval_binary_expression(BinOp::NotEqual, left, right)
+            }
+            Expr::GreaterThan(left, right) => {
+                self.eval_binary_expression(BinOp::GreaterThan, left, right)
+            }
+            Expr::GreaterThanOrEqual(left, right) => {
+                self.eval_binary_expression(BinOp::GreaterThanOrEqual, left, right)
+            }
+            Expr::LessThan(left, right) => {
+                self.eval_binary_expression(BinOp::LessThan, left, right)
+            }
+            Expr::LessThanOrEqual(left, right) => {
+                self.eval_binary_expression(BinOp::LessThanOrEqual, left, right)
+            }
+
+            Expr::Negative(e) => self.eval_negative_expression(e),
+            Expr::FunctionCall(ident, args) => self.eval_funccall_expression(ident, args),
+            Expr::Identifier(ident) => self.eval_ident_expression(ident),
+        }
+    }
+
+    fn search_global_variable(&self, ident: &Ident) -> Option<Variable> {
+        for gv in &self.global_variables {
+            if &gv.name == ident {
+                return Some(gv.clone());
+            }
+        }
+        return None;
+    }
+
+    fn search_global_variable_from_local_env(&self, ident: &Ident) -> Option<Variable> {
+        match &self.local_environment {
+            None => self.search_global_variable(ident),
+            Some(env) => {
+                for gvname in &env.global_variables_visible_from_local {
+                    if gvname == ident {
+                        return self.search_global_variable(ident);
+                    }
+                }
+                return None;
+            }
+        }
+    }
+
+    fn search_global_variable_from_local_env_and_set(
+        &mut self,
+        ident: &Ident,
+        value: &Value,
+    ) -> Option<()> {
+        match &mut self.local_environment {
+            None => self.search_global_variable_and_set(ident, &value),
+            Some(env) => {
+                for gvname in &mut env.global_variables_visible_from_local {
+                    if gvname == ident {
+                        return self.search_global_variable_and_set(ident, &value);
+                    }
+                }
+                return None;
+            }
+        }
+    }
+
+    fn search_global_variable_and_set(&mut self, ident: &Ident, value: &Value) -> Option<()> {
+        for gv in &mut self.global_variables {
+            if &gv.name == ident {
+                gv.value = value.clone();
+                return Some(());
+            }
+        }
+        return None;
+    }
+
+    fn eval_ident_expression(&mut self, ident: &Ident) -> Value {
+        if let Some(var) = self.search_local_variable(ident) {
+            return var.value;
+        }
+        if let Some(var) = self.search_global_variable_from_local_env(ident) {
+            return var.value;
+        }
+        self.throw_runtime_error(&format!("Cannot find a variable named `{}`", ident.name()))
+    }
+
+    fn search_local_variable(&self, ident: &Ident) -> Option<Variable> {
+        match &self.local_environment {
+            None => None,
+            Some(env) => {
+                for lv in &env.local_variables {
+                    if &lv.name == ident {
+                        return Some(lv.clone());
+                    }
+                }
+                return None;
+            }
+        }
+    }
+
+    fn search_local_variable_and_set(&mut self, ident: &Ident, value: &Value) -> Option<()> {
+        match &mut self.local_environment {
+            None => None,
+            Some(env) => {
+                for lv in &mut env.local_variables {
+                    if &lv.name == ident {
+                        lv.value = value.clone();
+                    }
+                }
+                return None;
+            }
+        }
+    }
+
+    fn add_global_variable_and_set(&mut self, ident: &Ident, v: &Value) -> () {
+        self.global_variables.push(Variable {
+            name: ident.clone(),
+            value: v.clone(),
+        })
+    }
+
+    fn search_function(&mut self, ident: &Ident) -> Option<Function> {
+        todo!()
+    }
+
+    fn eval_funccall_expression(&mut self, ident: &Ident, args: &[Expr]) -> Value {
+        match self.search_function(ident) {
+            Some(Function::Crowbar(func)) => self.call_crowbar_function(ident, args, func),
+            Some(Function::Native(func)) => self.call_native_function(ident, args, func),
+            None => self
+                .throw_runtime_error(&format!("Cannot find a function named `{}`", ident.name())),
+        }
+    }
+
+    fn eval_negative_expression(&mut self, expr: &Expr) -> Value {
+        let operand_val = self.eval_expression(expr);
+        match operand_val {
+            Value::Int(i) => Value::Int(-i),
+            Value::Double(d) => Value::Double(-d),
+            _ => self.throw_runtime_error(
+                "Invalid type found as the operand of the unary minus operator",
+            ),
+        }
+    }
+    fn eval_expression_optional(&mut self, expr: &Option<Expr>) -> Option<Value> {
         if let Some(expr) = expr {
             Some(self.eval_expression(expr))
         } else {
@@ -109,7 +381,7 @@ impl InterpreterMutable {
 
         match statement {
             Statement::Expression(expr) => {
-                self.eval_optional_expression(expr);
+                self.eval_expression_optional(expr);
             }
             Statement::Global(idents) => {
                 result = self.execute_global_statement(idents);
@@ -136,7 +408,7 @@ impl InterpreterMutable {
                 result = self.execute_for_statement(expr1, expr2, expr3, block);
             }
             Statement::Return(expr) => {
-                let value: Option<Value> = self.eval_optional_expression(expr);
+                let value: Option<Value> = self.eval_expression_optional(expr);
                 result = StatementResult::Return(value);
             }
         }
@@ -299,5 +571,13 @@ impl InterpreterMutable {
 
     fn throw_runtime_error(&self, msg: &str) -> ! {
         panic!("Runtime error: {}", msg)
+    }
+
+    fn call_crowbar_function(&self, ident: &Ident, args: &[Expr], func: ()) -> Value {
+        todo!()
+    }
+
+    fn call_native_function(&self, ident: &Ident, args: &[Expr], func: ()) -> Value {
+        todo!()
     }
 }

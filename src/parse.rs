@@ -638,7 +638,9 @@ fn test3() {
 #[test]
 fn test4() {
     use crate::lex::Ident;
-    use crate::parse::Expr::{Add, Assign, FunctionCall, Identifier, IntLiteral, LessThanOrEqual, StringLiteral};
+    use crate::parse::Expr::{
+        Add, Assign, FunctionCall, Identifier, IntLiteral, LessThanOrEqual, StringLiteral,
+    };
     use crate::parse::Statement::{Expression, For};
     let src = r#"for (i = 1; i <= 100; i = i + 1) {
         

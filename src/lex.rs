@@ -43,6 +43,9 @@ pub enum Token {
 pub struct Ident(String);
 
 impl Ident {
+    pub fn name(&self) -> &str {
+        &self.0
+    }
     /// # Panics
     /// Panics if the input does not start with a character that matches `'a'..='z' | 'A'..='Z' | '_'`,
     /// or if the input contains something other than `'a'..='z' | 'A'..='Z' | '_' | '0'..='9'`.
