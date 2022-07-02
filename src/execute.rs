@@ -22,6 +22,12 @@ pub enum Value {
 #[derive(PartialEq, Debug, Clone, Copy)]
 pub struct NativePointer {}
 
+impl std::fmt::Display for NativePointer {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        todo!()
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 struct Variable {
     name: Ident,
@@ -37,17 +43,6 @@ pub struct MutableEnvironment {
 pub struct LocalEnvironment {
     local_variables: Vec<Variable>,
     global_variables_visible_from_local: Vec<Ident>,
-}
-
-impl LocalEnvironment {
-    fn search_local_variable(&self, ident: &Ident) -> Option<Variable> {
-        for v in &self.local_variables {
-            if &v.name == ident {
-                return Some(v.clone());
-            }
-        }
-        return None;
-    }
 }
 
 pub struct InterpreterImmutable {
@@ -109,19 +104,34 @@ impl Interpreter {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
-enum BinOp {
-    Add,
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum NumOp {
     Sub,
     Mul,
     Div,
     Mod,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum EqOp {
     Equal,
     NotEqual,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CmpOp {
     GreaterThan,
     GreaterThanOrEqual,
     LessThan,
     LessThanOrEqual,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum BinOp {
+    Add,
+    Numerical(NumOp),
+    Eq(EqOp),
+    Cmp(CmpOp),
 }
 
 enum Function {
@@ -166,7 +176,33 @@ impl LocalEnvironment {
 
 impl MutableEnvironment {
     fn eval_binary_expression(&mut self, op: BinOp, left: &Expr, right: &Expr) -> Value {
-        todo!()
+        use BinOp::*;
+        use Value::*;
+        let left_val = self.eval_expression(left);
+        let right_val = self.eval_expression(right);
+        match (left_val, right_val, op) {
+            (Int(l), Int(r), Add) => Value::Int(l + r),
+            (Int(l), Int(r), Numerical(o)) => eval_int_numerics(o, l, r),
+            (Int(l), Int(r), Cmp(c)) => c.eval(l, r),
+            (Int(l), Int(r), Eq(e)) => e.eval(l, r),
+            (Double(l), Double(r), _) => eval_binary_double(op, l, r),
+            (Int(l), Double(r), _) => eval_binary_double(op, l as f64, r),
+            (Double(l), Int(r), _) => eval_binary_double(op, l, r as f64),
+            (Boolean(l), Boolean(r), Eq(e)) => e.eval(l, r),
+            (String(l), Int(r), BinOp::Add) => Value::String(format!("{}{}", l, r)),
+            (String(l), Double(r), BinOp::Add) => Value::String(format!("{}{}", l, r)),
+            (String(l), Boolean(r), BinOp::Add) => Value::String(format!("{}{}", l, r)),
+            (String(l), String(r), BinOp::Add) => Value::String(format!("{}{}", l, r)),
+            (String(l), NativePointer(r), BinOp::Add) => Value::String(format!("{}{}", l, r)),
+            (String(l), Null, BinOp::Add) => Value::String(format!("{}null", l)),
+            (String(l), String(r), BinOp::Cmp(c)) => c.eval(l, r),
+            (String(l), String(r), BinOp::Eq(c)) => c.eval(l, r),
+            (Null, Null, Eq(e)) => e.eval(Null, Null),
+            _ => self.throw_runtime_error(&format!(
+                "Invalid operation made using the operator `{:?}`",
+                op
+            )),
+        }
     }
 
     fn eval_assign_expression(&mut self, ident: &Ident, right: &Expr) -> Value {
@@ -222,25 +258,35 @@ impl MutableEnvironment {
             Expr::DoubleLiteral(d) => Value::Double(*d),
             Expr::IntLiteral(i) => Value::Int(*i),
             Expr::Add(left, right) => self.eval_binary_expression(BinOp::Add, left, right),
-            Expr::Sub(left, right) => self.eval_binary_expression(BinOp::Sub, left, right),
-            Expr::Mul(left, right) => self.eval_binary_expression(BinOp::Mul, left, right),
-            Expr::Div(left, right) => self.eval_binary_expression(BinOp::Div, left, right),
-            Expr::Mod(left, right) => self.eval_binary_expression(BinOp::Mod, left, right),
-            Expr::Equal(left, right) => self.eval_binary_expression(BinOp::Equal, left, right),
+            Expr::Sub(left, right) => {
+                self.eval_binary_expression(BinOp::Numerical(NumOp::Sub), left, right)
+            }
+            Expr::Mul(left, right) => {
+                self.eval_binary_expression(BinOp::Numerical(NumOp::Mul), left, right)
+            }
+            Expr::Div(left, right) => {
+                self.eval_binary_expression(BinOp::Numerical(NumOp::Div), left, right)
+            }
+            Expr::Mod(left, right) => {
+                self.eval_binary_expression(BinOp::Numerical(NumOp::Mod), left, right)
+            }
+            Expr::Equal(left, right) => {
+                self.eval_binary_expression(BinOp::Eq(EqOp::Equal), left, right)
+            }
             Expr::NotEqual(left, right) => {
-                self.eval_binary_expression(BinOp::NotEqual, left, right)
+                self.eval_binary_expression(BinOp::Eq(EqOp::NotEqual), left, right)
             }
             Expr::GreaterThan(left, right) => {
-                self.eval_binary_expression(BinOp::GreaterThan, left, right)
+                self.eval_binary_expression(BinOp::Cmp(CmpOp::GreaterThan), left, right)
             }
             Expr::GreaterThanOrEqual(left, right) => {
-                self.eval_binary_expression(BinOp::GreaterThanOrEqual, left, right)
+                self.eval_binary_expression(BinOp::Cmp(CmpOp::GreaterThanOrEqual), left, right)
             }
             Expr::LessThan(left, right) => {
-                self.eval_binary_expression(BinOp::LessThan, left, right)
+                self.eval_binary_expression(BinOp::Cmp(CmpOp::LessThan), left, right)
             }
             Expr::LessThanOrEqual(left, right) => {
-                self.eval_binary_expression(BinOp::LessThanOrEqual, left, right)
+                self.eval_binary_expression(BinOp::Cmp(CmpOp::LessThanOrEqual), left, right)
             }
 
             Expr::Negative(e) => self.eval_negative_expression(e),
@@ -428,16 +474,15 @@ impl MutableEnvironment {
     }
 
     fn execute_global_statement(&mut self, idents: &[Ident]) -> StatementResult {
-        let mut result = StatementResult::Normal;
-        match &self.local_environment {
+        let result = StatementResult::Normal;
+        match &mut self.local_environment {
             None => self.throw_runtime_error("`global` statement found in top-level"),
             Some(env) => {
                 for ident in idents {
-                    todo!()
+                    env.global_variables_visible_from_local.push(ident.clone())
                 }
             }
         }
-
         result
     }
 
@@ -580,4 +625,47 @@ impl MutableEnvironment {
     fn call_native_function(&self, ident: &Ident, args: &[Expr], func: ()) -> Value {
         todo!()
     }
+}
+
+impl EqOp {
+    fn eval<T: PartialEq>(self, l: T, r: T) -> Value {
+        Value::Boolean(match self {
+            EqOp::Equal => l == r,
+            EqOp::NotEqual => l != r,
+        })
+    }
+}
+
+impl CmpOp {
+    fn eval<T: PartialOrd>(self, l: T, r: T) -> Value {
+        Value::Boolean(match self {
+            CmpOp::GreaterThan => l > r,
+            CmpOp::GreaterThanOrEqual => l >= r,
+            CmpOp::LessThan => l < r,
+            CmpOp::LessThanOrEqual => l <= r,
+        })
+    }
+}
+
+fn eval_binary_double(o: BinOp, l: f64, r: f64) -> Value {
+    match o {
+        BinOp::Add => Value::Double(l + r),
+        BinOp::Numerical(o) => Value::Double(match o {
+            NumOp::Sub => l - r,
+            NumOp::Mul => l * r,
+            NumOp::Div => l / r,
+            NumOp::Mod => l % r,
+        }),
+        BinOp::Eq(e) => e.eval(l, r),
+        BinOp::Cmp(c) => c.eval(l, r),
+    }
+}
+
+fn eval_int_numerics(o: NumOp, l: i32, r: i32) -> Value {
+    Value::Int(match o {
+        NumOp::Sub => l - r,
+        NumOp::Mul => l * r,
+        NumOp::Div => l / r,
+        NumOp::Mod => l % r,
+    })
 }
