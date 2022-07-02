@@ -287,7 +287,7 @@ print("b.." + b + "\n");"##;
         use crate::parse::Expr::{
             Add, Assign, DoubleLiteral, FunctionCall, Identifier, IntLiteral, StringLiteral,
         };
-        use crate::parse::FuncDef;
+        use crate::parse::CrowbarFuncDef;
         use crate::parse::Statement::{Expression, Global};
         assert_eq!(
             parsed,
@@ -296,7 +296,7 @@ print("b.." + b + "\n");"##;
                     Ident::from("a"),
                     Box::new(IntLiteral(10))
                 )))),
-                Definition(FuncDef {
+                Definition(CrowbarFuncDef {
                     func_name: Ident::from("func"),
                     params: vec![],
                     block: crate::parse::Block(vec![
@@ -304,7 +304,7 @@ print("b.." + b + "\n");"##;
                         Expression(Some(Assign(Ident::from("a"), Box::new(IntLiteral(20)))))
                     ])
                 }),
-                Definition(FuncDef {
+                Definition(CrowbarFuncDef {
                     func_name: Ident::from("func2"),
                     params: vec![],
                     block: crate::parse::Block(vec![

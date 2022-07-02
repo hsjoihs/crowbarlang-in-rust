@@ -1,7 +1,7 @@
 use crate::lex::Ident;
 use crate::parse::Block;
+use crate::parse::CrowbarFuncDef;
 use crate::parse::Expr;
-use crate::parse::FuncDef;
 use crate::parse::Statement;
 #[derive(PartialEq, Debug)]
 pub enum StatementResult {
@@ -39,7 +39,7 @@ pub struct MutableEnvironment {
     global_variables: Vec<Variable>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct LocalEnvironment {
     local_variables: Vec<Variable>,
     global_variables_visible_from_local: Vec<Ident>,
@@ -48,6 +48,19 @@ pub struct LocalEnvironment {
 pub struct InterpreterImmutable {
     function_list: Vec<FuncDef>,
     statement_list: Vec<Statement>,
+}
+
+pub enum NativeFuncContent {}
+
+pub enum FuncDef {
+    Crowbar(CrowbarFuncDef),
+    Native(NativeFuncDef),
+}
+
+pub struct NativeFuncDef {
+    pub func_name: Ident,
+    pub params: Vec<()>,
+    pub content: NativeFuncContent,
 }
 
 pub struct Interpreter {
@@ -73,7 +86,7 @@ impl Interpreter {
         for funcdef_or_statement in parsed {
             match funcdef_or_statement {
                 crate::parse::DefinitionOrStatement::Definition(def) => {
-                    function_list.push(def);
+                    function_list.push(FuncDef::Crowbar(def));
                 }
                 crate::parse::DefinitionOrStatement::Statement(stmt) => {
                     statement_list.push(stmt);
@@ -95,8 +108,14 @@ impl Interpreter {
 
     pub fn interpret(&mut self) {
         self.add_std_fp();
-        self.mutable
-            .execute_statement_list(&self.immutable.statement_list);
+        self.mutable.execute_statement_list(
+            &self.immutable.function_list,
+            &self.immutable.statement_list,
+        );
+    }
+
+    pub fn add_native_function(&mut self, name: &str, content: NativeFuncContent) {
+        todo!()
     }
 
     fn add_std_fp(&mut self) {
@@ -132,11 +151,6 @@ enum BinOp {
     Numerical(NumOp),
     Eq(EqOp),
     Cmp(CmpOp),
-}
-
-enum Function {
-    Crowbar(()),
-    Native(()),
 }
 
 #[test]
@@ -175,11 +189,17 @@ impl LocalEnvironment {
 }
 
 impl MutableEnvironment {
-    fn eval_binary_expression(&mut self, op: BinOp, left: &Expr, right: &Expr) -> Value {
+    fn eval_binary_expression(
+        &mut self,
+        funcs: &[FuncDef],
+        op: BinOp,
+        left: &Expr,
+        right: &Expr,
+    ) -> Value {
         use BinOp::*;
         use Value::*;
-        let left_val = self.eval_expression(left);
-        let right_val = self.eval_expression(right);
+        let left_val = self.eval_expression(funcs, left);
+        let right_val = self.eval_expression(funcs, right);
         match (left_val, right_val, op) {
             (Int(l), Int(r), Add) => Value::Int(l + r),
             (Int(l), Int(r), Numerical(o)) => eval_int_numerics(o, l, r),
@@ -205,8 +225,8 @@ impl MutableEnvironment {
         }
     }
 
-    fn eval_assign_expression(&mut self, ident: &Ident, right: &Expr) -> Value {
-        let v = self.eval_expression(right);
+    fn eval_assign_expression(&mut self, funcs: &[FuncDef], ident: &Ident, right: &Expr) -> Value {
+        let v = self.eval_expression(funcs, right);
         if let Some(_) = self.search_local_variable_and_set(ident, &v) {
         } else if let Some(_) = self.search_global_variable_from_local_env_and_set(ident, &v) {
         } else if let Some(env) = &mut self.local_environment {
@@ -216,15 +236,15 @@ impl MutableEnvironment {
         }
         return v;
     }
-    fn eval_expression(&mut self, expr: &Expr) -> Value {
+    fn eval_expression(&mut self, funcs: &[FuncDef], expr: &Expr) -> Value {
         match expr {
-            Expr::Assign(left, right) => self.eval_assign_expression(left, right),
+            Expr::Assign(left, right) => self.eval_assign_expression(funcs, left, right),
             Expr::LogicalOr(left, right) => {
-                let left_val = self.eval_expression(left);
+                let left_val = self.eval_expression(funcs, left);
                 match left_val {
                     Value::Boolean(true) =>{ return Value::Boolean(true) },
                     Value::Boolean(false) =>{
-                        let right_val = self.eval_expression(right);
+                        let right_val = self.eval_expression(funcs, right);
                         match right_val {
                             a @ Value::Boolean(_) => a,
                             _ => self.throw_runtime_error("expected a boolean type for the condition of the right side of `||`, but it was not."),
@@ -236,11 +256,11 @@ impl MutableEnvironment {
                 }
             }
             Expr::LogicalAnd(left, right) => {
-                let left_val = self.eval_expression(left);
+                let left_val = self.eval_expression(funcs, left);
                 match left_val {
                     Value::Boolean(false) =>{ return Value::Boolean(false) },
                     Value::Boolean(true) =>{
-                        let right_val = self.eval_expression(right);
+                        let right_val = self.eval_expression(funcs, right);
                         match right_val {
                             a @ Value::Boolean(_) => a,
                             _ => self.throw_runtime_error("expected a boolean type for the condition of the right side of `&&`, but it was not."),
@@ -257,40 +277,43 @@ impl MutableEnvironment {
             Expr::StringLiteral(s) => Value::String(s.clone()),
             Expr::DoubleLiteral(d) => Value::Double(*d),
             Expr::IntLiteral(i) => Value::Int(*i),
-            Expr::Add(left, right) => self.eval_binary_expression(BinOp::Add, left, right),
+            Expr::Add(left, right) => self.eval_binary_expression(funcs, BinOp::Add, left, right),
             Expr::Sub(left, right) => {
-                self.eval_binary_expression(BinOp::Numerical(NumOp::Sub), left, right)
+                self.eval_binary_expression(funcs, BinOp::Numerical(NumOp::Sub), left, right)
             }
             Expr::Mul(left, right) => {
-                self.eval_binary_expression(BinOp::Numerical(NumOp::Mul), left, right)
+                self.eval_binary_expression(funcs, BinOp::Numerical(NumOp::Mul), left, right)
             }
             Expr::Div(left, right) => {
-                self.eval_binary_expression(BinOp::Numerical(NumOp::Div), left, right)
+                self.eval_binary_expression(funcs, BinOp::Numerical(NumOp::Div), left, right)
             }
             Expr::Mod(left, right) => {
-                self.eval_binary_expression(BinOp::Numerical(NumOp::Mod), left, right)
+                self.eval_binary_expression(funcs, BinOp::Numerical(NumOp::Mod), left, right)
             }
             Expr::Equal(left, right) => {
-                self.eval_binary_expression(BinOp::Eq(EqOp::Equal), left, right)
+                self.eval_binary_expression(funcs, BinOp::Eq(EqOp::Equal), left, right)
             }
             Expr::NotEqual(left, right) => {
-                self.eval_binary_expression(BinOp::Eq(EqOp::NotEqual), left, right)
+                self.eval_binary_expression(funcs, BinOp::Eq(EqOp::NotEqual), left, right)
             }
             Expr::GreaterThan(left, right) => {
-                self.eval_binary_expression(BinOp::Cmp(CmpOp::GreaterThan), left, right)
+                self.eval_binary_expression(funcs, BinOp::Cmp(CmpOp::GreaterThan), left, right)
             }
-            Expr::GreaterThanOrEqual(left, right) => {
-                self.eval_binary_expression(BinOp::Cmp(CmpOp::GreaterThanOrEqual), left, right)
-            }
+            Expr::GreaterThanOrEqual(left, right) => self.eval_binary_expression(
+                funcs,
+                BinOp::Cmp(CmpOp::GreaterThanOrEqual),
+                left,
+                right,
+            ),
             Expr::LessThan(left, right) => {
-                self.eval_binary_expression(BinOp::Cmp(CmpOp::LessThan), left, right)
+                self.eval_binary_expression(funcs, BinOp::Cmp(CmpOp::LessThan), left, right)
             }
             Expr::LessThanOrEqual(left, right) => {
-                self.eval_binary_expression(BinOp::Cmp(CmpOp::LessThanOrEqual), left, right)
+                self.eval_binary_expression(funcs, BinOp::Cmp(CmpOp::LessThanOrEqual), left, right)
             }
 
-            Expr::Negative(e) => self.eval_negative_expression(e),
-            Expr::FunctionCall(ident, args) => self.eval_funccall_expression(ident, args),
+            Expr::Negative(e) => self.eval_negative_expression(funcs, e),
+            Expr::FunctionCall(ident, args) => self.eval_funccall_expression(funcs, ident, args),
             Expr::Identifier(ident) => self.eval_ident_expression(ident),
         }
     }
@@ -391,21 +414,61 @@ impl MutableEnvironment {
         })
     }
 
-    fn search_function(&mut self, ident: &Ident) -> Option<Function> {
-        todo!()
+    fn eval_funccall_expression(
+        &mut self,
+        funcs: &[FuncDef],
+        ident: &Ident,
+        args: &[Expr],
+    ) -> Value {
+        for f in funcs {
+            match f {
+                FuncDef::Crowbar(f) => {
+                    if &f.func_name == ident {
+                        return self.call_crowbar_function(funcs, f, args);
+                    }
+                }
+                FuncDef::Native(f) => {
+                    if &f.func_name == ident {
+                        return self.call_native_function(funcs, f, args);
+                    }
+                }
+            }
+        }
+        self.throw_runtime_error(&format!("Cannot find a function named `{}`", ident.name()))
     }
 
-    fn eval_funccall_expression(&mut self, ident: &Ident, args: &[Expr]) -> Value {
-        match self.search_function(ident) {
-            Some(Function::Crowbar(func)) => self.call_crowbar_function(ident, args, func),
-            Some(Function::Native(func)) => self.call_native_function(ident, args, func),
-            None => self
-                .throw_runtime_error(&format!("Cannot find a function named `{}`", ident.name())),
+    fn call_crowbar_function(&mut self, funcs: &[FuncDef], f: &CrowbarFuncDef, args: &[Expr]) -> Value {
+        let mut local_env: LocalEnvironment = Default::default();
+        if f.params.len() != args.len() {
+            self.throw_runtime_error(&format!("Mismatch: the number of arguments passed is {} while the number of parameters is {}", args.len(), f.params.len()))
+        }
+        for (i, arg) in args.iter().enumerate() {
+            let arg_val = self.eval_expression(funcs, arg);  
+            local_env.add_local_variable_and_set(&f.params[i], &arg_val); 
+        }
+
+        let mut env = Some(local_env);
+
+        // Store the current environment in env, so that we can restore it later
+        std::mem::swap(&mut env, &mut self.local_environment);
+
+        let result = self.execute_statement_list(funcs, &f.block.0);
+
+        // Restore the environment
+        std::mem::swap(&mut env, &mut self.local_environment);
+
+        match result {
+            StatementResult::Return(Some(value)) => value,
+            _ => Value::Null 
         }
     }
 
-    fn eval_negative_expression(&mut self, expr: &Expr) -> Value {
-        let operand_val = self.eval_expression(expr);
+    fn call_native_function(&mut self, funcs: &[FuncDef], f: &NativeFuncDef, args: &[Expr]) -> Value {
+        todo!()
+    }
+
+    fn eval_negative_expression(&mut self, funcs: &[FuncDef], expr: &Expr) -> Value {
+        let operand_val = self.eval_expression(funcs, expr);
         match operand_val {
             Value::Int(i) => Value::Int(-i),
             Value::Double(d) => Value::Double(-d),
@@ -414,20 +477,24 @@ impl MutableEnvironment {
             ),
         }
     }
-    fn eval_expression_optional(&mut self, expr: &Option<Expr>) -> Option<Value> {
+    fn eval_expression_optional(
+        &mut self,
+        funcs: &[FuncDef],
+        expr: &Option<Expr>,
+    ) -> Option<Value> {
         if let Some(expr) = expr {
-            Some(self.eval_expression(expr))
+            Some(self.eval_expression(funcs, expr))
         } else {
             None
         }
     }
 
-    fn execute_statement(&mut self, statement: &Statement) -> StatementResult {
+    fn execute_statement(&mut self, funcs: &[FuncDef], statement: &Statement) -> StatementResult {
         let mut result = StatementResult::Normal;
 
         match statement {
             Statement::Expression(expr) => {
-                self.eval_expression_optional(expr);
+                self.eval_expression_optional(funcs, expr);
             }
             Statement::Global(idents) => {
                 result = self.execute_global_statement(idents);
@@ -438,11 +505,12 @@ impl MutableEnvironment {
                 elsif_list,
                 else_block,
             } => {
-                result = self.execute_if_statement(if_expr, if_block, elsif_list, else_block);
+                result =
+                    self.execute_if_statement(funcs, if_expr, if_block, elsif_list, else_block);
             }
 
             Statement::While(expr, block) => {
-                result = self.execute_while_statement(expr, block);
+                result = self.execute_while_statement(funcs, expr, block);
             }
             Statement::Break => {
                 result = StatementResult::Break;
@@ -451,10 +519,10 @@ impl MutableEnvironment {
                 result = StatementResult::Continue;
             }
             Statement::For(expr1, expr2, expr3, block) => {
-                result = self.execute_for_statement(expr1, expr2, expr3, block);
+                result = self.execute_for_statement(funcs, expr1, expr2, expr3, block);
             }
             Statement::Return(expr) => {
-                let value: Option<Value> = self.eval_expression_optional(expr);
+                let value: Option<Value> = self.eval_expression_optional(funcs, expr);
                 result = StatementResult::Return(value);
             }
         }
@@ -462,10 +530,14 @@ impl MutableEnvironment {
         result
     }
 
-    fn execute_statement_list(&mut self, stmts: &[Statement]) -> StatementResult {
+    fn execute_statement_list(
+        &mut self,
+        funcs: &[FuncDef],
+        stmts: &[Statement],
+    ) -> StatementResult {
         let mut result = StatementResult::Normal;
         for stmt in stmts {
-            result = self.execute_statement(stmt);
+            result = self.execute_statement(funcs, stmt);
             if result != StatementResult::Normal {
                 return result;
             }
@@ -488,17 +560,18 @@ impl MutableEnvironment {
 
     fn execute_elsif(
         &mut self,
+        funcs: &[FuncDef],
         elsif_list: &[(Expr, Block)],
         elsif_executed: &mut bool,
     ) -> StatementResult {
         *elsif_executed = false;
         let mut result = StatementResult::Normal;
         for elsif in elsif_list {
-            let cond = self.eval_expression(&elsif.0);
+            let cond = self.eval_expression(funcs, &elsif.0);
             match cond {
                 Value::Boolean(false) => {}
                 Value::Boolean(true) => {
-                    result = self.execute_statement_list(&elsif.1 .0);
+                    result = self.execute_statement_list(funcs, &elsif.1 .0);
                     *elsif_executed = true;
                     if result != StatementResult::Normal {
                         return result;
@@ -514,29 +587,30 @@ impl MutableEnvironment {
 
     fn execute_if_statement(
         &mut self,
+        funcs: &[FuncDef],
         if_expr: &Expr,
         if_block: &Block,
         elsif_list: &[(Expr, Block)],
         else_block: &Option<Block>,
     ) -> StatementResult {
         let mut result;
-        let cond = self.eval_expression(if_expr);
+        let cond = self.eval_expression(funcs, if_expr);
         match cond {
             Value::Boolean(false) => {
                 let mut elsif_executed: bool = false;
-                result = self.execute_elsif(elsif_list, &mut elsif_executed);
+                result = self.execute_elsif(funcs, elsif_list, &mut elsif_executed);
                 if result != StatementResult::Normal {
                     return result;
                 }
                 if !elsif_executed {
                     if let Some(block) = else_block {
-                        result = self.execute_statement_list(&block.0);
+                        result = self.execute_statement_list(funcs, &block.0);
                     }
                     return result;
                 }
             }
             Value::Boolean(true) => {
-                result = self.execute_statement_list(&if_block.0);
+                result = self.execute_statement_list(funcs, &if_block.0);
             }
             _ => self.throw_runtime_error(
                 "expected a boolean type for the condition of `if`, but it was not.",
@@ -544,17 +618,22 @@ impl MutableEnvironment {
         }
         result
     }
-    fn execute_while_statement(&mut self, expr: &Expr, block: &Block) -> StatementResult {
+    fn execute_while_statement(
+        &mut self,
+        funcs: &[FuncDef],
+        expr: &Expr,
+        block: &Block,
+    ) -> StatementResult {
         let mut result;
         loop {
-            let cond = self.eval_expression(expr);
+            let cond = self.eval_expression(funcs, expr);
             match cond {
                 Value::Boolean(false) => {
                     result = StatementResult::Normal; // fixes a bug that exists in the original implementation
                     break;
                 }
                 Value::Boolean(true) => {
-                    result = self.execute_statement_list(&block.0);
+                    result = self.execute_statement_list(funcs, &block.0);
                     match result {
                         StatementResult::Return(_) => break,
                         StatementResult::Break => {
@@ -573,6 +652,7 @@ impl MutableEnvironment {
     }
     fn execute_for_statement(
         &mut self,
+        funcs: &[FuncDef],
         expr1: &Option<Expr>,
         expr2: &Option<Expr>,
         expr3: &Option<Expr>,
@@ -580,11 +660,11 @@ impl MutableEnvironment {
     ) -> StatementResult {
         let mut result;
         if let Some(initial_expr) = expr1 {
-            let _initial: Value = self.eval_expression(initial_expr);
+            let _initial: Value = self.eval_expression(funcs, initial_expr);
         }
         loop {
             if let Some(cond_expr) = expr2 {
-                let cond = self.eval_expression(cond_expr);
+                let cond = self.eval_expression(funcs, cond_expr);
                 match cond {
                     Value::Boolean(false) => {
                         result = StatementResult::Normal; // fixes a bug that exists in the original implementation
@@ -596,7 +676,7 @@ impl MutableEnvironment {
                     ),
                 }
             }
-            result = self.execute_statement_list(&block.0);
+            result = self.execute_statement_list(funcs, &block.0);
 
             match result {
                 StatementResult::Return(_) => break,
@@ -608,7 +688,7 @@ impl MutableEnvironment {
             }
 
             if let Some(post_expr) = expr3 {
-                let _3 = self.eval_expression(post_expr);
+                let _3 = self.eval_expression(funcs, post_expr);
             }
         }
         result
@@ -616,14 +696,6 @@ impl MutableEnvironment {
 
     fn throw_runtime_error(&self, msg: &str) -> ! {
         panic!("Runtime error: {}", msg)
-    }
-
-    fn call_crowbar_function(&self, ident: &Ident, args: &[Expr], func: ()) -> Value {
-        todo!()
-    }
-
-    fn call_native_function(&self, ident: &Ident, args: &[Expr], func: ()) -> Value {
-        todo!()
     }
 }
 

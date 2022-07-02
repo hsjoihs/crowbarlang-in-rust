@@ -188,7 +188,7 @@ macro_rules! parse_optional_expression_and_a_token {
     };
 }
 #[derive(PartialEq, Debug)]
-pub struct FuncDef {
+pub struct CrowbarFuncDef {
     pub func_name: Ident,
     pub params: Vec<Ident>,
     pub block: Block,
@@ -196,7 +196,7 @@ pub struct FuncDef {
 
 #[derive(PartialEq, Debug)]
 pub enum DefinitionOrStatement {
-    Definition(FuncDef),
+    Definition(CrowbarFuncDef),
     Statement(Statement),
 }
 
@@ -228,7 +228,7 @@ impl<'a> ParserState<'a> {
         }
     }
 
-    fn parse_function_definition(&mut self) -> FuncDef {
+    fn parse_function_definition(&mut self) -> CrowbarFuncDef {
         if self.tokvec.get(0) == Some(&Token::Function) {
             self.advance(1);
             if let Some(Token::Identifier(func_name)) = self.tokvec.get(0) {
@@ -241,7 +241,7 @@ impl<'a> ParserState<'a> {
                 if self.tokvec.get(0) == Some(&Token::RightParen) {
                     self.advance(1);
                     let block = self.parse_block();
-                    FuncDef {
+                    CrowbarFuncDef {
                         func_name: func_name.clone(),
                         params: vec![],
                         block,
@@ -254,7 +254,7 @@ impl<'a> ParserState<'a> {
                         "a closing parenthesis after the name of the function"
                     );
                     let block = self.parse_block();
-                    FuncDef {
+                    CrowbarFuncDef {
                         func_name: func_name.clone(),
                         params,
                         block,
