@@ -593,9 +593,9 @@ impl<'a> ParserState<'a> {
             None => {
                 panic!("Unexpected end of file encountered while trying to parse an expression")
             }
-            Some(unexpected) => panic!(
-                "Unexpected {:?} encountered while trying to parse an expression",
-                unexpected
+            Some((unexpected, line_number)) => panic!(
+                "Parse error at line {}: Unexpected {:?} encountered while trying to parse an expression",
+                line_number, unexpected
             ),
         }
     }

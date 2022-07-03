@@ -102,7 +102,7 @@ impl LexerState {
     #[must_use]
     const fn new() -> Self {
         Self {
-            line_number: 0,
+            line_number: 1,
             mode: LexerMode::Initial,
         }
     }
