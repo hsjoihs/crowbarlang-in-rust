@@ -28,7 +28,7 @@ pub enum Expr {
 }
 
 struct ParserState<'a> {
-    tokvec: &'a [Token],
+    tokvec: &'a [(Token, usize)],
 }
 
 macro_rules! left_assoc_bin {
@@ -36,7 +36,7 @@ macro_rules! left_assoc_bin {
         fn $this_parser_name(&mut self) -> Expr {
             let mut expr = self.$next_parser_name();
             loop {
-                if let Some(a @ $delimiter_token) = self.tokvec.get(0) {
+                if let Some((a @ $delimiter_token, _)) = self.tokvec.get(0) {
                     self.advance(1);
                     let expr2 = self.$next_parser_name();
                     expr = $get_constructor_from_tok(a)(Box::new(expr), Box::new(expr2));
@@ -55,7 +55,7 @@ macro_rules! comma_list {
         fn $this_parser_name(&mut self) -> Vec<$elem_type> {
             let mut ans = vec![self.$elem_parser_name()];
             loop {
-                if self.tokvec.get(0) == Some(&Token::Comma) {
+                if matches!(self.tokvec.get(0), Some((Token::Comma, _))) {
                     self.advance(1);
                     ans.push(self.$elem_parser_name());
                 } else {
@@ -70,14 +70,14 @@ macro_rules! comma_list {
 macro_rules! expect_token_and_advance {
     ($self:expr, $token: pat, $expected: expr) => {
         match $self.tokvec.get(0) {
-            Some(token @ $token) => {
+            Some((token @ $token, _line_number)) => {
                 $self.advance(1);
                 token
             }
             None => panic!("Unexpected end of file encountered; expected {}", $expected),
-            Some(unexpected) => panic!(
-                "Unexpected {:?} encountered; expected {}",
-                unexpected, $expected
+            Some((unexpected, line_number)) => panic!(
+                "Parse error at line {}: Unexpected {:?} encountered; expected {}",
+                line_number, unexpected, $expected
             ),
         }
     };
@@ -88,11 +88,11 @@ fn test_parse_expression() {
     use crate::lex::Ident;
     assert_eq!(
         crate::parse::expression(&[
-            Token::Identifier(Ident::from("i")),
-            Token::Mod,
-            Token::IntLiteral(15),
-            Token::Equal,
-            Token::IntLiteral(0),
+            (Token::Identifier(Ident::from("i")),0),
+            (Token::Mod,0),
+            (Token::IntLiteral(15),0),
+            (Token::Equal,0),
+            (Token::IntLiteral(0),0),
         ]),
         Expr::Equal(
             Box::new(Expr::Mod(
@@ -108,10 +108,10 @@ fn test_parse_expression() {
 fn test_parse_expression2() {
     use crate::lex::Ident;
     let tokvec = vec![
-        Token::Identifier(Ident::from("print")),
-        Token::LeftParen,
-        Token::StringLiteral("FizzBuzz\n".to_string()),
-        Token::RightParen,
+        (Token::Identifier(Ident::from("print")), 0),
+        (Token::LeftParen, 0),
+        (Token::StringLiteral("FizzBuzz\n".to_string()), 0),
+        (Token::RightParen, 0),
     ];
     let mut state = ParserState::new(&tokvec);
     let expr = state.parse_expression();
@@ -146,25 +146,25 @@ pub enum Statement {
 pub struct Block(pub Vec<Statement>);
 
 #[must_use]
-pub fn expression(tokvec: &[Token]) -> Expr {
+pub fn expression(tokvec: &[(Token, usize)]) -> Expr {
     let mut state = ParserState::new(tokvec);
     state.parse_expression()
 }
 
 #[must_use]
-pub fn statement(tokvec: &[Token]) -> Statement {
+pub fn statement(tokvec: &[(Token, usize)]) -> Statement {
     let mut state = ParserState::new(tokvec);
     state.parse_statement()
 }
 
 #[must_use]
-pub fn translation_unit(tokvec: &[Token]) -> Vec<DefinitionOrStatement> {
+pub fn translation_unit(tokvec: &[(Token, usize)]) -> Vec<DefinitionOrStatement> {
     let mut state = ParserState::new(tokvec);
     state.parse_translation_unit()
 }
 
 #[must_use]
-pub fn statements(tokvec: &[Token]) -> Vec<Statement> {
+pub fn statements(tokvec: &[(Token, usize)]) -> Vec<Statement> {
     let mut state = ParserState::new(tokvec);
     let mut stmts = vec![];
     loop {
@@ -177,7 +177,7 @@ pub fn statements(tokvec: &[Token]) -> Vec<Statement> {
 
 macro_rules! parse_optional_expression_and_a_token {
     ($self: expr, $token: pat, $msg: expr) => {
-        if $self.tokvec.get(0) == Some(&Token::Semicolon) {
+        if matches!($self.tokvec.get(0), Some((Token::Semicolon, _))) {
             $self.advance(1);
             None
         } else {
@@ -201,7 +201,7 @@ pub enum DefinitionOrStatement {
 }
 
 impl<'a> ParserState<'a> {
-    pub const fn new(tokvec: &'a [Token]) -> Self {
+    pub const fn new(tokvec: &'a [(Token, usize)]) -> Self {
         ParserState { tokvec }
     }
     fn advance(&mut self, i: usize) {
@@ -219,7 +219,7 @@ impl<'a> ParserState<'a> {
     }
 
     fn parse_definition_or_statement(&mut self) -> DefinitionOrStatement {
-        if self.tokvec.get(0) == Some(&Token::Function) {
+        if matches!(self.tokvec.get(0), Some((Token::Function,_))) {
             let func_def = self.parse_function_definition();
             DefinitionOrStatement::Definition(func_def)
         } else {
@@ -229,16 +229,16 @@ impl<'a> ParserState<'a> {
     }
 
     fn parse_function_definition(&mut self) -> CrowbarFuncDef {
-        if self.tokvec.get(0) == Some(&Token::Function) {
+        if matches!(self.tokvec.get(0), Some((Token::Function,_))) {
             self.advance(1);
-            if let Some(Token::Identifier(func_name)) = self.tokvec.get(0) {
+            if let Some((Token::Identifier(func_name), _)) = self.tokvec.get(0) {
                 self.advance(1);
                 expect_token_and_advance!(
                     self,
                     Token::LeftParen,
                     "an opening parenthesis after the name of the function"
                 );
-                if self.tokvec.get(0) == Some(&Token::RightParen) {
+                if matches!(self.tokvec.get(0), Some((Token::RightParen,_))) {
                     self.advance(1);
                     let block = self.parse_block();
                     CrowbarFuncDef {
@@ -278,21 +278,21 @@ impl<'a> ParserState<'a> {
 
     fn parse_identifier(&mut self) -> Ident {
         match self.tokvec.get(0) {
-            Some(Token::Identifier(ident)) => {
+            Some((Token::Identifier(ident), _)) => {
                 self.advance(1);
                 ident.clone()
             }
             None => panic!("Unexpected end of file encountered; expected an identifier"),
-            Some(unexpected) => panic!(
-                "Unexpected {:?} encountered; expected an identifier. \nRemaining tokens: \n{:?}",
-                unexpected, self.tokvec
+            Some((unexpected, line_number)) => panic!(
+                "Parse error at line {}: Unexpected {:?} encountered; expected an identifier. \nRemaining tokens: \n{:?}",
+                line_number, unexpected, self.tokvec
             ),
         }
     }
 
     fn parse_statement(&mut self) -> Statement {
         match self.tokvec.get(0) {
-            Some(Token::Global) => {
+            Some((Token::Global, _)) => {
                 self.advance(1);
                 let idents = self.parse_identifier_list();
                 expect_token_and_advance!(
@@ -302,7 +302,7 @@ impl<'a> ParserState<'a> {
                 );
                 Statement::Global(idents)
             }
-            Some(Token::While) => {
+            Some((Token::While, _)) => {
                 self.advance(1);
                 expect_token_and_advance!(
                     self,
@@ -318,7 +318,7 @@ impl<'a> ParserState<'a> {
                 let block = self.parse_block();
                 Statement::While(expr, block)
             }
-            Some(Token::Continue) => {
+            Some((Token::Continue, _)) => {
                 self.advance(1);
                 expect_token_and_advance!(
                     self,
@@ -327,7 +327,7 @@ impl<'a> ParserState<'a> {
                 );
                 Statement::Continue
             }
-            Some(Token::Break) => {
+            Some((Token::Break, _)) => {
                 self.advance(1);
                 expect_token_and_advance!(
                     self,
@@ -336,7 +336,7 @@ impl<'a> ParserState<'a> {
                 );
                 Statement::Break
             }
-            Some(Token::Return) => {
+            Some((Token::Return, _)) => {
                 self.advance(1);
                 return Statement::Return(parse_optional_expression_and_a_token!(
                     self,
@@ -344,7 +344,7 @@ impl<'a> ParserState<'a> {
                     "semicolon at the end of `return` statement"
                 ));
             }
-            Some(Token::For) => {
+            Some((Token::For, _)) => {
                 self.advance(1);
                 expect_token_and_advance!(
                     self,
@@ -369,7 +369,7 @@ impl<'a> ParserState<'a> {
                 let block = self.parse_block();
                 Statement::For(expr1, expr2, expr3, block)
             }
-            Some(Token::If) => {
+            Some((Token::If, _)) => {
                 self.advance(1);
                 expect_token_and_advance!(
                     self,
@@ -392,7 +392,7 @@ impl<'a> ParserState<'a> {
 
                 let mut elsif_list = vec![];
                 loop {
-                    if self.tokvec.get(0) == Some(&Token::Elsif) {
+                    if matches!(self.tokvec.get(0), Some((Token::Elsif,_))) {
                         self.advance(1);
                         expect_token_and_advance!(
                             self,
@@ -412,7 +412,7 @@ impl<'a> ParserState<'a> {
                     }
                 }
 
-                if self.tokvec.get(0) == Some(&Token::Else) {
+                if matches!(self.tokvec.get(0), Some((Token::Else,_))) {
                     self.advance(1);
                     let else_block = self.parse_block();
                     return Statement::If {
@@ -430,7 +430,7 @@ impl<'a> ParserState<'a> {
                     else_block: None,
                 }
             }
-            Some(Token::Function) => panic!("This should not be handled by parse_statement"),
+            Some((Token::Function, _)) => panic!("This should not be handled by parse_statement"),
             _ => {
                 let expr = parse_optional_expression_and_a_token!(
                     self,
@@ -449,13 +449,13 @@ impl<'a> ParserState<'a> {
             Token::LeftCurly,
             "an opening bracket starting a block"
         );
-        if self.tokvec.get(0) == Some(&Token::RightCurly) {
+        if matches!(self.tokvec.get(0), Some((Token::RightCurly,_))) {
             self.advance(1);
             return Block(vec![]);
         }
         let mut ans = vec![];
         loop {
-            if self.tokvec.get(0) == Some(&Token::RightCurly) {
+            if matches!(self.tokvec.get(0), Some((Token::RightCurly,_))) {
                 self.advance(1);
                 return Block(ans);
             }
@@ -464,8 +464,8 @@ impl<'a> ParserState<'a> {
     }
 
     pub fn parse_expression(&mut self) -> Expr {
-        if let Some(Token::Identifier(ident)) = self.tokvec.get(0) {
-            if self.tokvec.get(1) == Some(&Token::Assign) {
+        if let Some((Token::Identifier(ident),_)) = self.tokvec.get(0) {
+            if matches!(self.tokvec.get(1), Some((Token::Assign, _))) {
                 self.advance(2);
                 let expr2 = self.parse_expression();
                 return Expr::Assign(ident.clone(), Box::new(expr2));
@@ -529,7 +529,7 @@ impl<'a> ParserState<'a> {
     }
 
     fn parse_unary_expression(&mut self) -> Expr {
-        if self.tokvec.get(0) == Some(&Token::Sub) {
+        if matches!(self.tokvec.get(0), Some((Token::Sub,_))) {
             self.advance(1);
             let expr2 = self.parse_unary_expression();
             return Expr::Negative(Box::new(expr2));
@@ -539,41 +539,41 @@ impl<'a> ParserState<'a> {
 
     fn parse_primary_expression(&mut self) -> Expr {
         match self.tokvec.get(0) {
-            Some(Token::Null) => {
+            Some((Token::Null, _)) => {
                 self.advance(1);
                 Expr::Null
             }
-            Some(Token::False) => {
+            Some((Token::False, _)) => {
                 self.advance(1);
                 Expr::False
             }
-            Some(Token::True) => {
+            Some((Token::True, _)) => {
                 self.advance(1);
                 Expr::True
             }
-            Some(Token::StringLiteral(s)) => {
+            Some((Token::StringLiteral(s), _)) => {
                 self.advance(1);
                 Expr::StringLiteral(s.clone())
             }
-            Some(Token::DoubleLiteral(d)) => {
+            Some((Token::DoubleLiteral(d), _)) => {
                 self.advance(1);
                 Expr::DoubleLiteral(*d)
             }
-            Some(Token::IntLiteral(i)) => {
+            Some((Token::IntLiteral(i), _)) => {
                 self.advance(1);
                 Expr::IntLiteral(*i)
             }
-            Some(Token::LeftParen) => {
+            Some((Token::LeftParen, _)) => {
                 self.advance(1);
                 let expr = self.parse_expression();
                 expect_token_and_advance!(self, Token::RightParen, "right paren");
                 expr
             }
-            Some(Token::Identifier(ident)) => {
+            Some((Token::Identifier(ident), _)) => {
                 self.advance(1);
-                if self.tokvec.get(0) == Some(&Token::LeftParen) {
+                if matches!(self.tokvec.get(0), Some((Token::LeftParen,_))) {
                     self.advance(1);
-                    if self.tokvec.get(0) == Some(&Token::RightParen) {
+                    if matches!(self.tokvec.get(0), Some((Token::RightParen,_))) {
                         self.advance(1);
                         Expr::FunctionCall(ident.clone(), vec![])
                     } else {
@@ -612,7 +612,7 @@ fn test3() {
     use Statement::For;
     let src = r#"for (i = 1; i <= 100; i = i + 1) {
 }"#;
-    let lexed = crate::lex::lex(src);
+    let lexed = crate::lex::lex_with_linenumber(src);
     let parsed = crate::parse::statements(&lexed);
 
     assert_eq!(
@@ -646,7 +646,7 @@ fn test4() {
 		print("FizzBuzz\n");
 	
 }"#;
-    let lexed = crate::lex::lex(src);
+    let lexed = crate::lex::lex_with_linenumber(src);
     let parsed = crate::parse::statements(&lexed);
     assert_eq!(
         parsed,

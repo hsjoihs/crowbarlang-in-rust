@@ -267,7 +267,7 @@ impl LexerState {
 }
 
 #[must_use]
-pub fn lex(input: &str) -> Vec<Token> {
+pub fn lex_with_linenumber(input: &str) -> Vec<(Token, usize)> {
     let mut ans = Vec::new();
     let mut state = LexerState::new();
     let mut rest = input;
@@ -290,11 +290,16 @@ pub fn lex(input: &str) -> Vec<Token> {
             ("global", Token::Global),
         ] {
             if token == Token::Identifier(Ident::from(reserved_str)) {
-                ans.push(reserved_token.clone());
+                ans.push((reserved_token.clone(), state.line_number));
                 continue 'outer;
             }
         }
-        ans.push(token);
+        ans.push((token, state.line_number));
     }
     ans
+}
+
+#[must_use]
+pub fn lex(input: &str) -> Vec<Token> {
+    lex_with_linenumber(input).into_iter().map(|(tok, _num)| tok).collect()
 }

@@ -99,6 +99,7 @@ fn test1() {
             StringLiteral,
         };
         use crate::parse::Statement::{Expression, For, If};
+        let lexed = crate::lex::lex_with_linenumber(src);
         let parsed = crate::parse::statements(&lexed);
         assert_eq!(
             parsed,
@@ -253,7 +254,7 @@ fn test2() {
             ]
         );
     }
-
+    let lexed = crate::lex::lex_with_linenumber(src);
     let parsed = crate::parse::translation_unit(&lexed);
     {
         use crate::lex::Ident;

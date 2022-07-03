@@ -96,7 +96,7 @@ impl Interpreter {
 
     #[must_use]
     pub fn compile_from_str(src: &str) -> Self {
-        let lexed = crate::lex::lex(src);
+        let lexed = crate::lex::lex_with_linenumber(src);
         let parsed = crate::parse::translation_unit(&lexed);
         let mut function_list = vec![];
         let mut statement_list = vec![];
