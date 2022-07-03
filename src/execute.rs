@@ -398,6 +398,8 @@ impl MutableEnvironment {
             (String(l), String(r), BinOp::Cmp(c)) => c.eval(&l, &r),
             (String(l), String(r), BinOp::Eq(c)) => c.eval(&l, &r),
             (Null, Null, Eq(e)) => e.eval(&Null, &Null),
+            (Null, _, Eq(EqOp::Equal)) | (_, Null, Eq(EqOp::Equal)) => Value::Boolean(false),
+            (Null, _, Eq(EqOp::NotEqual)) | (_, Null, Eq(EqOp::NotEqual)) => Value::Boolean(true),
             _ => self.throw_runtime_error(&format!(
                 "Invalid operation made using the operator `{:?}`",
                 op

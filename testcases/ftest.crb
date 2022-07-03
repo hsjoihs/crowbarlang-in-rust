@@ -1,0 +1,8 @@
+fp = fopen("testcases/ftest.crb", "r");
+print("\n");
+fp2 = fopen("testcases/ftest.fileio.actual", "w");
+while ((str = fgets(fp)) != null) {
+    fputs(str, fp2);
+}
+fclose(fp);
+fclose(fp2);

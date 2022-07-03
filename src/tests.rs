@@ -2,7 +2,7 @@
 fn test1() {
     use crate::lex::Ident;
 
-    let src = include_str!("../fizzbuzz.crb");
+    let src = include_str!("../testcases/fizzbuzz.crb");
     let lexed = crate::lex::lex(src);
     {
         // lex
@@ -174,7 +174,7 @@ fn test1() {
 #[test]
 fn test2() {
     use crate::lex::Ident;
-    let src = include_str!("../global_versus_local.crb");
+    let src = include_str!("../testcases/global_versus_local.crb");
     let lexed = crate::lex::lex(src);
     {
         use crate::lex::Token::{

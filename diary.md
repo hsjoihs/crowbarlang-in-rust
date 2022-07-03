@@ -351,3 +351,28 @@ stdout に print してるのでテストの書き方に困る。Write を素朴
 歯を食いしばって全部書いた。ファイルポインタを C と FFI するのがつらい。unsafe まみれ。
 
 てかこれで todo は消えたっぽいな。
+
+## 2022年7月3日 (Day 6)
+
+テストはシェルスクリプトで書くことにした。てか本家実装にテストファイルあるのね。じゃあこれで実験してみるか。
+
+よし、どちらも失敗！まあそうなるよね。
+
+ftest の方は `Invalid operation made using the operator` と書いてある。あ、片方が `null` のときは `==` とか `!=` が許されるっぽい？
+
+ほんまや、ここだけ 
+
+```c
+ } else if (left_val.type == CRB_NULL_VALUE
+               || right_val.type == CRB_NULL_VALUE) {
+        result.type = CRB_BOOLEAN_VALUE;
+        result.u.boolean_value
+            = eval_binary_null(inter, operator, &left_val, &right_val,
+                               left->line_number);
+```
+
+と `||` になってる。ソースコードはよく読もうな。
+
+直し、 fileio と stdout の両方を独立にテストするようにしたところ、ftest の方は通った。問題はパースエラーを吐いてる test.crb の方だ。
+こういうのは二分探索するに限る。
+てかやっぱ行番号が出ないとデバッグつらいな。
