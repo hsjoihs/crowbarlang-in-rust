@@ -70,7 +70,7 @@ impl std::fmt::Display for Value {
         match self {
             Value::Boolean(b) => write!(f, "{}", b),
             Value::Int(b) => write!(f, "{}", b),
-            Value::Double(b) => write!(f, "{}", b),
+            Value::Double(b) => write!(f, "{:.6}", b),
             Value::String(b) => write!(f, "{}", b),
             Value::NativePointer(b) => write!(f, "(NativePointer:{:?})", b),
             Value::Null => write!(f, "null"),

@@ -384,3 +384,9 @@ ftest の方は `Invalid operation made using the operator` と書いてある�
 90行目で落ちてるらしい。見てみよう。
 
 えーと、90行目の次である for 文で落ちているな。さては行番号を 1-indexed じゃなくて 0-indexed にしてるな。はい案の定。
+
+あー、`parse_optional_expression_and_a_token!` マクロがセミコロン以外で正しく動かないバグがあった。なるほどね
+
+えーとあと落ちるのは……はいはい、 double の表示方法の差ね。C はデフォルトで 6 digits の precision で出力する。
+
+よし、テストケース通った！もうこれで ver 0.1 系は完了と言っても大丈夫だろう（フラグ）

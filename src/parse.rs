@@ -177,7 +177,7 @@ pub fn statements(tokvec: &[(Token, usize)]) -> Vec<Statement> {
 
 macro_rules! parse_optional_expression_and_a_token {
     ($self: expr, $token: pat, $msg: expr) => {
-        if matches!($self.tokvec.get(0), Some((Token::Semicolon, _))) {
+        if matches!($self.tokvec.get(0), Some(($token, _))) {
             $self.advance(1);
             None
         } else {
