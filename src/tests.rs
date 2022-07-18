@@ -104,13 +104,16 @@ fn test1() {
         assert_eq!(
             parsed,
             vec![For(
-                Some(Assign(Ident::from("i"), Box::new(IntLiteral(1)))),
+                Some(Assign(
+                    Box::new(Identifier(Ident::from("i"))),
+                    Box::new(IntLiteral(1))
+                )),
                 Some(LessThanOrEqual(
                     Box::new(Identifier(Ident::from("i"))),
                     Box::new(IntLiteral(100))
                 )),
                 Some(Assign(
-                    Ident::from("i"),
+                    Box::new(Identifier(Ident::from("i"))),
                     Box::new(Add(
                         Box::new(Identifier(Ident::from("i"))),
                         Box::new(IntLiteral(1))
@@ -268,7 +271,7 @@ fn test2() {
             parsed,
             vec![
                 Statement(Expression(Some(Assign(
-                    Ident::from("a"),
+                    Box::new(Identifier(Ident::from("a"))),
                     Box::new(IntLiteral(10))
                 )))),
                 Definition(CrowbarFuncDef {
@@ -276,14 +279,20 @@ fn test2() {
                     params: vec![],
                     block: crate::parse::Block(vec![
                         Global(vec![Ident::from("a")]),
-                        Expression(Some(Assign(Ident::from("a"), Box::new(IntLiteral(20)))))
+                        Expression(Some(Assign(
+                            Box::new(Identifier(Ident::from("a"))),
+                            Box::new(IntLiteral(20))
+                        )))
                     ])
                 }),
                 Definition(CrowbarFuncDef {
                     func_name: Ident::from("func2"),
                     params: vec![],
                     block: crate::parse::Block(vec![
-                        Expression(Some(Assign(Ident::from("a"), Box::new(IntLiteral(30))))),
+                        Expression(Some(Assign(
+                            Box::new(Identifier(Ident::from("a"))),
+                            Box::new(IntLiteral(30))
+                        ))),
                         Expression(Some(FunctionCall(
                             Ident::from("print"),
                             vec![Add(
@@ -309,7 +318,7 @@ fn test2() {
                     )]
                 )))),
                 Statement(Expression(Some(Assign(
-                    Ident::from("b"),
+                    Box::new(Identifier(Ident::from("b"))),
                     Box::new(DoubleLiteral(3.2))
                 )))),
                 Statement(Expression(Some(FunctionCall(

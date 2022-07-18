@@ -423,7 +423,12 @@ impl MutableEnvironment {
     }
     fn eval_expression(&mut self, funcs: &[FuncDef], expr: &Expr) -> Value {
         match expr {
-            Expr::Assign(left, right) => self.eval_assign_expression(funcs, left, right),
+            Expr::IndexAccess { array, index } => todo!(),
+            Expr::MethodCall { receiver, method_name, args } => todo!(),
+            Expr::Increment(expr) => todo!(),
+            Expr::Decrement(expr) => todo!(),
+            Expr::ArrayLiteral(exprs) => todo!(),
+            Expr::Assign(left, right) => todo!(), //self.eval_assign_expression(funcs, left, right),
             Expr::LogicalOr(left, right) => {
                 let left_val = self.eval_expression(funcs, left);
                 match left_val {

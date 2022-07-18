@@ -390,3 +390,114 @@ ftest の方は `Invalid operation made using the operator` と書いてある�
 えーとあと落ちるのは……はいはい、 double の表示方法の差ね。C はデフォルトで 6 digits の precision で出力する。
 
 よし、テストケース通った！もうこれで ver 0.1 系は完了と言っても大丈夫だろう（フラグ）
+
+## 2022年7月19日 (Day 7)
+
+めちゃめちゃ日にちが空いた。さて、もう crowbar ver 0.2 を目指すとしますか。えーと、
+
+* 配列の導入
+* メソッドもどきの呼び出し
+* インクリメント・デクリメント
+* GC
+
+か。GC が最大の改修で、それ以外はわりと楽そうだな。まずは文法の改修から。
+
+### 文法
+
+あー、そういや
+
+```
+expression
+        : logical_or_expression
+        | postfix_expression ASSIGN expression
+```
+
+ってやつがあったな。これやるには「一度 postfix_expression で読んで、その後に ASSIGN がなかったら、さっき読んだのを破棄して logical_or_expression で読み直す」が必要。しかし現状の ParserState でそんな器用なことをするにはどうするの。
+
+えーと現状の実装は
+
+```rust
+struct ParserState<'a> {
+    tokvec: &'a [(Token, usize)],
+}
+```
+
+`usize` わかりにくいから `LineNumber` 型を作るか。えっと
+
+```rust
+struct ParserState<'a> {
+    tokvec: &'a [(Token, LineNumber)],
+}
+```
+
+だから、単に不変参照をもう一個生やせばいいだけか。
+
+さて、文法の改修はかなりあっけなく完了してしまったな。あ、でも配列リテラル `{1, 2, 3}` とかがまだか。
+
+（というか配列がいわゆる参照型なんだよな crowbar。だからそれもちゃんと実装してやらんとだし。）
+
+まあとりあえずまずは文法。えーと、
+
+```
+array_literal
+        : LC expression_list RC
+        | LC expression_list COMMA RC
+        ;
+
+expression_list
+        : /* empty */
+        | expression
+        | expression_list COMMA expression
+        ;
+```
+
+えーっとつまり、 `{}` とか `{1}` とか `{1,}` とか `{1,2}` とか `{1,2,}` とか、あ、`{,2}` とか `{,2,}` とか `{,2,3,}` とかも合法ってことか。それぞれの意味論どうなるの？いわゆるケツカンマは無視ってことなんだろうけど、頭のカンマも無視なのかな。
+
+とりあえず
+
+```
+a = {, 2, 3, 4, 5, 6, 7, };
+for (i = 0; i < a.size(); i = i + 1) {
+    print("(" + a[i] + ")");
+}
+print(a);
+print("\n");
+print("len.." + "abc".length() + "\n");
+```
+
+と書いて走らせると……セグフォ！！！
+
+とりあえずケツカンマを実装する。
+
+https://twitter.com/hsjoihs/status/1549175219696181248
+
+を落とし込めばいいので、
+
+```rust
+let mut ans = vec![];
+loop {
+    if matches!(self.tokvec.get(0), Some((Token::RightCurly, _))) {
+        self.advance(1);
+        break;
+    }
+    ans.push(self.parse_expression());
+
+    match self.tokvec.get(0) {
+        Some((Token::Comma, _)) => {
+            self.advance(1);
+            continue;
+        }
+        Some((Token::RightCurly, _)) => {
+            self.advance(1);
+            break;
+        }
+        None => panic!("Unexpected end of file encountered while trying to parse an array literal"),
+        _ => panic!("Parse error at line {}: Incorrect array literal", line_number.0)
+    }
+}
+Expr::ArrayLiteral(ans)
+```
+
+とすればよさそうだな。
+
+さて、文法は実装できてそうだし、とりあえず `execute.rs` 上での実体を全て `todo!()` にして、コミットだけしてしまおう。
