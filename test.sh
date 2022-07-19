@@ -20,3 +20,4 @@ test2 ftest
 test test
 test arr_without_method
 test arr_ref
+test arr0

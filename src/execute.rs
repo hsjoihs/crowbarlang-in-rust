@@ -424,11 +424,12 @@ impl MutableEnvironment {
     }
 
     fn assign(&mut self, funcs: &[FuncDef], left: &Expr, value: Value) {
-
         // todo: many of the .clone() are unnecessary
         match left {
             Expr::Identifier(ident) => {
-                if self.search_local_variable_and_set(ident, value.clone()).is_some()
+                if self
+                    .search_local_variable_and_set(ident, value.clone())
+                    .is_some()
                     || self
                         .search_global_variable_from_local_env_and_set(ident, &value)
                         .is_some()
@@ -458,7 +459,7 @@ impl MutableEnvironment {
                 let len = array.len();
                 if let Ok(index) = TryInto::<usize>::try_into(*index) {
                     match (*array).get_mut(index) {
-                        Some(lvalue) => { 
+                        Some(lvalue) => {
                             *lvalue = v;
                             return;
                         },
@@ -518,6 +519,55 @@ impl MutableEnvironment {
         self.get_array_element(&array, &index)
     }
 
+    fn eval_method_call_expression(
+        &mut self,
+        funcs: &[FuncDef],
+        receiver: &Expr,
+        method_name: &Ident,
+        args: &[Expr],
+    ) -> Value {
+        let receiver = self.eval_expression(funcs, receiver);
+        match (receiver, method_name.name()) {
+            (Value::Array(arr), "add") => match args {
+                [expr] => {
+                    let v = self.eval_expression(funcs, expr);
+                    arr.borrow_mut().push(v);
+                    Value::Null
+                }
+                _ => {
+                    self.throw_runtime_error("Incorrect number of arguments passed to method `add`")
+                }
+            },
+            (Value::Array(arr), "size") => match args {
+                [] => Value::Int(arr.borrow().len().try_into().unwrap()),
+                _ => self
+                    .throw_runtime_error("Incorrect number of arguments passed to method `size`"),
+            },
+            (Value::Array(arr), "resize") => match args {
+                [expr] => {
+                    let v = self.eval_expression(funcs, expr);
+                    match v {
+                        Value::Int(new_len) => {
+                            let mut arr = arr.borrow_mut();
+                            arr.resize(new_len.try_into().unwrap(), Value::Null);
+                        }
+                        _ => self.throw_runtime_error(
+                            "type mismatch: the argument to .resize() must be an integer",
+                        ),
+                    }
+                    Value::Null
+                }
+                _ => self
+                    .throw_runtime_error("Incorrect number of arguments passed to method `resize`"),
+            },
+            (Value::String(str), "length") => Value::Int(str.len().try_into().unwrap()),
+            _ => self.throw_runtime_error(&format!(
+                "A method named `{}` does not exist",
+                method_name.name()
+            )),
+        }
+    }
+
     fn eval_expression(&mut self, funcs: &[FuncDef], expr: &Expr) -> Value {
         match expr {
             Expr::IndexAccess { array, index } => self.eval_array_index_access(funcs, array, index),
@@ -525,7 +575,7 @@ impl MutableEnvironment {
                 receiver,
                 method_name,
                 args,
-            } => todo!(),
+            } => self.eval_method_call_expression(funcs, receiver, method_name, args),
             Expr::Increment(expr) => todo!(),
             Expr::Decrement(expr) => todo!(),
             Expr::ArrayLiteral(exprs) => self.eval_array_literal_expression(funcs, exprs),
@@ -686,7 +736,7 @@ impl MutableEnvironment {
             for lv in &mut env.local_variables {
                 if &lv.name == ident {
                     lv.value = value;
-                    return Some(())
+                    return Some(());
                 }
             }
             None
