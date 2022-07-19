@@ -22,3 +22,4 @@ test arr_without_method
 test arr_ref
 test arr0
 test test_02_
+test test_02

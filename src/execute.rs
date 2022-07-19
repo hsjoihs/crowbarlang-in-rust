@@ -291,6 +291,23 @@ impl Interpreter {
                 ),
             }),
         );
+
+        self.add_native_function(
+            "new_array",
+            Box::new(|args|
+                if let [] = args {
+                    panic!("Expected 1 argument or more to the native function `new_array`, but got 0 arguments.")
+                } else {
+                    let dimensions = args.iter().map(|arg| match arg {
+                        Value::Int(len) => (*len)
+                            .try_into()
+                            .expect("The argument to new_array() is a negative integer"),
+                        _ => panic!("The argument to new_array() is not an integer")
+                    }).collect::<Vec<usize>>();
+                    new_array(&dimensions)
+                }
+            ),
+        );
     }
 
     pub fn add_native_function(&mut self, name: &str, content: NativeFuncContent) {
@@ -315,6 +332,17 @@ impl Interpreter {
                 value: Value::NativePointer(NativePointer::FilePointer(FilePointer::StdErr)),
             },
         ]);
+    }
+}
+
+fn new_array(dimensions: &[usize]) -> Value {
+    match dimensions {
+        [] => Value::Null,
+        [len, rest @ ..] => {
+            let mut vec = vec![];
+            vec.resize_with(*len, || new_array(rest));
+            Value::Array(Rc::new(RefCell::new(vec)))
+        }
     }
 }
 

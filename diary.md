@@ -546,9 +546,22 @@ Windows で走らせたらコケた。 `"\r\n"` 周りですね。というこ�
 
 ……ん？実行が異様に遅い。これは無限ループとか踏んでないか？こういう無限ループはインクリメントのミスとかでしょ（Cコンパイラ自作時にまさに同様の経験をしたので）
 
-ああはい、配列の方にだけ実装してて、識別子へのアクセスのときに実装してなかった。それはそう。
+ああはい、配列の方にだけインクリメントを実装してて、識別子へのアクセスのときに実装してなかった。それはそう。
 
 それはそれとしてテストが落ちる。えーと、「Runtime error: Cannot find a function named `new_array`」
 
 そうでした。すっかり忘れてた。とりあえず `new_array` を削ったテストケースが通ることを確認。
 
+えーと、単一引数だけなら `Value::Array(Rc::new(RefCell::new(vec![Value::Null; len])))` でいいんだけど。
+
+単純に `Value::Array(Rc::new(RefCell::new(vec![new_array(rest); *len])))` と再帰呼び出しすると `Rc<RefCell<T>>` の `.clone()` が呼ばれてしまって同じ配列を参照してしまうのでダメで（一敗）、
+
+```rust
+let mut vec = vec![];
+vec.resize_with(*len, || new_array(rest));
+Value::Array(Rc::new(RefCell::new(vec)))
+```
+
+と `.resize_with()` で処理してやれば問題ないはず。
+
+よーしテスト通った。これにて ver.0.2 完了です。
