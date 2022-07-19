@@ -17,6 +17,8 @@ pub enum Token {
     RightParen,
     LeftCurly,
     RightCurly,
+    LeftBracket,
+    RightBracket,
     Semicolon,
     Comma,
     LogicalAnd,
@@ -37,6 +39,9 @@ pub enum Token {
     IntLiteral(i32),
     DoubleLiteral(f64),
     StringLiteral(String),
+    Dot,
+    Increment,
+    Decrement,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -187,6 +192,8 @@ impl LexerState {
                             (")", Token::RightParen),
                             ("{", Token::LeftCurly),
                             ("}", Token::RightCurly),
+                            ("[", Token::LeftBracket),
+                            ("]", Token::RightBracket),
                             (";", Token::Semicolon),
                             (",", Token::Comma),
                             ("&&", Token::LogicalAnd),
@@ -200,11 +207,15 @@ impl LexerState {
                             ("<", Token::LessThan),
                             ("=", Token::Assign),
                             (">", Token::GreaterThan),
+                            // Must look for ++ earlier than we look for +
+                            ("++", Token::Increment),
+                            ("--", Token::Decrement),
                             ("+", Token::Add),
                             ("-", Token::Sub),
                             ("*", Token::Mul),
                             ("/", Token::Div),
                             ("%", Token::Mod),
+                            (".", Token::Dot),
                         ] {
                             if let Some(rest) = input.strip_prefix(prefix) {
                                 return (Some(token), rest);
@@ -266,8 +277,11 @@ impl LexerState {
     }
 }
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct LineNumber(pub usize);
+
 #[must_use]
-pub fn lex_with_linenumber(input: &str) -> Vec<(Token, usize)> {
+pub fn lex_with_linenumber(input: &str) -> Vec<(Token, LineNumber)> {
     let mut ans = Vec::new();
     let mut state = LexerState::new();
     let mut rest = input;
@@ -290,16 +304,19 @@ pub fn lex_with_linenumber(input: &str) -> Vec<(Token, usize)> {
             ("global", Token::Global),
         ] {
             if token == Token::Identifier(Ident::from(reserved_str)) {
-                ans.push((reserved_token.clone(), state.line_number));
+                ans.push((reserved_token.clone(), LineNumber(state.line_number)));
                 continue 'outer;
             }
         }
-        ans.push((token, state.line_number));
+        ans.push((token, LineNumber(state.line_number)));
     }
     ans
 }
 
 #[must_use]
 pub fn lex(input: &str) -> Vec<Token> {
-    lex_with_linenumber(input).into_iter().map(|(tok, _num)| tok).collect()
+    lex_with_linenumber(input)
+        .into_iter()
+        .map(|(tok, _num)| tok)
+        .collect()
 }
