@@ -423,6 +423,41 @@ impl MutableEnvironment {
         v
     }
 
+    fn eval_compound_add_expression(
+        &mut self,
+        funcs: &[FuncDef],
+        expr: &Expr,
+        delta: i32,
+    ) -> Value {
+        match expr {
+            Expr::IndexAccess { array, index } => {
+                // must not evaluate the expression twice
+                let array = self.eval_expression(funcs, array);
+                let index = self.eval_expression(funcs, index);
+
+                // all the remaining operations are implemented using `Value`
+                if let Value::Int(i) = self.get_array_element(&array, &index) {
+                    let new_val = Value::Int(i + delta);
+                    self.set_array_element(&array, &index, new_val.clone());
+                    new_val
+                } else {
+                    self.throw_runtime_error("cannot increment what is not an int")
+                }
+            }
+            Expr::Identifier(ident) => {
+                // it's totally fine to evaluate an identifier twice
+                if let Value::Int(i) = self.eval_ident_expression(ident) {
+                    let new_val = Value::Int(i + delta);
+                    self.assign(funcs, expr, new_val.clone());
+                    new_val
+                } else {
+                    self.throw_runtime_error("cannot increment what is not an int")
+                }
+            }
+            _ => self.throw_runtime_error("cannot increment what is not an lvalue"),
+        }
+    }
+
     fn assign(&mut self, funcs: &[FuncDef], left: &Expr, value: Value) {
         // todo: many of the .clone() are unnecessary
         match left {
@@ -576,8 +611,8 @@ impl MutableEnvironment {
                 method_name,
                 args,
             } => self.eval_method_call_expression(funcs, receiver, method_name, args),
-            Expr::Increment(expr) => todo!(),
-            Expr::Decrement(expr) => todo!(),
+            Expr::Increment(expr) => self.eval_compound_add_expression(funcs, expr, 1),
+            Expr::Decrement(expr) => self.eval_compound_add_expression(funcs, expr, -1),
             Expr::ArrayLiteral(exprs) => self.eval_array_literal_expression(funcs, exprs),
             Expr::Assign(left, right) => self.eval_assign_expression(funcs, left, right),
             Expr::LogicalOr(left, right) => {
