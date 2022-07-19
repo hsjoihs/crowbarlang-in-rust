@@ -1,3 +1,6 @@
+use std::cell::RefCell;
+use std::rc::Rc;
+
 use crate::lex::Ident;
 use crate::parse::Block;
 use crate::parse::CrowbarFuncDef;
@@ -18,6 +21,7 @@ pub enum Value {
     String(String),
     NativePointer(NativePointer),
     Null,
+    Array(Rc<RefCell<Vec<Value>>>),
 }
 #[derive(PartialEq, Debug, Clone)]
 pub enum NativePointer {
@@ -74,6 +78,12 @@ impl std::fmt::Display for Value {
             Value::String(b) => write!(f, "{}", b),
             Value::NativePointer(b) => write!(f, "(NativePointer:{:?})", b),
             Value::Null => write!(f, "null"),
+            Value::Array(arr) => {
+                let arr = arr.borrow();
+                let vec: Vec<String> = arr.iter().map(std::string::ToString::to_string).collect();
+                // (1, 2, 3, 4, 5, 6, 7, 8)
+                write!(f, "({})", vec.join(", "))
+            }
         }
     }
 }
@@ -351,7 +361,7 @@ fn test_set_local_var() {
         global_variables: vec![],
     };
 
-    me.search_local_variable_and_set(&Ident::from("foo"), &Value::Boolean(false));
+    me.search_local_variable_and_set(&Ident::from("foo"), Value::Boolean(false));
     assert_eq!(
         me.local_environment,
         Some(LocalEnvironment {
@@ -409,41 +419,105 @@ impl MutableEnvironment {
 
     fn eval_assign_expression(&mut self, funcs: &[FuncDef], left: &Expr, right: &Expr) -> Value {
         let v = self.eval_expression(funcs, right);
-        self.assign(funcs, left, &v);
+        self.assign(funcs, left, v.clone());
         v
     }
 
-    fn assign(&mut self, funcs: &[FuncDef], left: &Expr, v: &Value)  {
+    fn assign(&mut self, funcs: &[FuncDef], left: &Expr, value: Value) {
+
+        // todo: many of the .clone() are unnecessary
         match left {
             Expr::Identifier(ident) => {
-                if self.search_local_variable_and_set(ident, &v).is_some()
+                if self.search_local_variable_and_set(ident, value.clone()).is_some()
                     || self
-                        .search_global_variable_from_local_env_and_set(ident, &v)
+                        .search_global_variable_from_local_env_and_set(ident, &value)
                         .is_some()
                 {
                 } else if let Some(env) = &mut self.local_environment {
-                    env.add_local_variable_and_set(ident, &v);
+                    env.add_local_variable_and_set(ident, &value);
                 } else {
-                    self.add_global_variable_and_set(ident, &v);
+                    self.add_global_variable_and_set(ident, value);
                 }
             }
             Expr::IndexAccess { array, index } => {
                 let array = self.eval_expression(funcs, array);
                 let index = self.eval_expression(funcs, index);
 
-                self.set_array_element(&array, &index, &v);
+                self.set_array_element(&array, &index, value);
             }
-            _ => {
-                self.throw_runtime_error("Type error: cannot assign to an expression that is not an lvalue")
-            }
+            _ => self.throw_runtime_error(
+                "Type error: cannot assign to an expression that is not an lvalue",
+            ),
         }
     }
-    fn set_array_element(&mut self, array: &Value, index: &Value, v: &Value) {
-        todo!()
+
+    fn set_array_element(&mut self, array: &Value, index: &Value, v: Value) {
+        match (array, index) {
+            (Value::Array(array), Value::Int(index)) => {
+                let mut array = array.borrow_mut();
+                let len = array.len();
+                if let Ok(index) = TryInto::<usize>::try_into(*index) {
+                    match (*array).get_mut(index) {
+                        Some(lvalue) => { *lvalue = v; },
+                        None => self.throw_runtime_error(
+                            &format!("index out of bound: tried to access the index {} of an array of length {}", index, len)
+                        ),
+                    }
+                }
+                self.throw_runtime_error(&format!(
+                    "index out of bound: tried to access the index {} of an array of length {}",
+                    index, len
+                ))
+            }
+            (_, _) => self.throw_runtime_error(
+                "expected an array to be indexed and an integer to index the array, but didn't.",
+            ),
+        }
     }
+
+    fn get_array_element(&mut self, array: &Value, index: &Value) -> Value {
+        match (array, index) {
+            (Value::Array(array), Value::Int(index)) => {
+                let array = array.borrow();
+                let len = array.len();
+                if let Ok(index) = TryInto::<usize>::try_into(*index) {
+                    match array.get(index) {
+                        Some(v) => {return v.clone();},
+                        None => self.throw_runtime_error(
+                            &format!("index out of bound: tried to access the index {} of an array of length {}", index, len)
+                        ),
+                    }
+                }
+                self.throw_runtime_error(&format!(
+                    "index out of bound: tried to access the index {} of an array of length {}",
+                    index, len
+                ))
+            }
+            (_, _) => self.throw_runtime_error(
+                "expected an array to be indexed and an integer to index the array, but didn't.",
+            ),
+        }
+    }
+
+    fn eval_array_literal_expression(&mut self, funcs: &[FuncDef], exprs: &[Expr]) -> Value {
+        let mut ans = vec![];
+        for expr in exprs {
+            let val = self.eval_expression(funcs, expr);
+            ans.push(val);
+        }
+        Value::Array(Rc::new(RefCell::new(ans)))
+    }
+
+    fn eval_array_index_access(&mut self, funcs: &[FuncDef], array: &Expr, index: &Expr) -> Value {
+        let array = self.eval_expression(funcs, array);
+        let index = self.eval_expression(funcs, index);
+
+        self.get_array_element(&array, &index)
+    }
+
     fn eval_expression(&mut self, funcs: &[FuncDef], expr: &Expr) -> Value {
         match expr {
-            Expr::IndexAccess { array, index } => todo!(),
+            Expr::IndexAccess { array, index } => self.eval_array_index_access(funcs, array, index),
             Expr::MethodCall {
                 receiver,
                 method_name,
@@ -451,7 +525,7 @@ impl MutableEnvironment {
             } => todo!(),
             Expr::Increment(expr) => todo!(),
             Expr::Decrement(expr) => todo!(),
-            Expr::ArrayLiteral(exprs) => todo!(),
+            Expr::ArrayLiteral(exprs) => self.eval_array_literal_expression(funcs, exprs),
             Expr::Assign(left, right) => self.eval_assign_expression(funcs, left, right),
             Expr::LogicalOr(left, right) => {
                 let left_val = self.eval_expression(funcs, left);
@@ -604,11 +678,11 @@ impl MutableEnvironment {
         }
     }
 
-    fn search_local_variable_and_set(&mut self, ident: &Ident, value: &Value) -> Option<()> {
+    fn search_local_variable_and_set(&mut self, ident: &Ident, value: Value) -> Option<()> {
         if let Some(env) = &mut self.local_environment {
             for lv in &mut env.local_variables {
                 if &lv.name == ident {
-                    lv.value = value.clone();
+                    lv.value = value;
                     return Some(())
                 }
             }
@@ -618,10 +692,10 @@ impl MutableEnvironment {
         }
     }
 
-    fn add_global_variable_and_set(&mut self, ident: &Ident, v: &Value) {
+    fn add_global_variable_and_set(&mut self, ident: &Ident, v: Value) {
         self.global_variables.push(Variable {
             name: ident.clone(),
-            value: v.clone(),
+            value: v,
         });
     }
 

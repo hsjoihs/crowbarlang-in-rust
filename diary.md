@@ -505,6 +505,27 @@ Expr::ArrayLiteral(ans)
 
 あ、左辺が識別子のときの実装は保たないと既存のテストが通らないので、そこはちゃんと対処してコミット。
 
+### 配列・参照・GC
+
+「ver.0.2では、mark-sweep型のGCを実装します。」という書き方になっているということなので、mark-sweepがない限りそれは crowbar ver.0.2 と呼べないということだろう（そうかな？）。ということでやっていく必要がある。
+
+……んー、でも現状ってそもそも明示的な参照カウンタすらないのよね。というのも、`Copy` な値または `String` しか扱ってないので。
+
+しかしもちろん参照型を入れるとなると非自明な管理が必要。ということで、まず `Rc` で正しく実装することを目標にしよう。
+
+（というか、 `Rc` とほぼ同等に使える `Gc` を提供するライブラリがあるっぽいのよね https://github.com/Manishearth/rust-gc ）
+
+さて、`Rc`。
+
+> Shared references in Rust disallow mutation by default, and `Rc` is no exception: you cannot generally obtain a mutable reference to something inside an `Rc`. If you need mutability, put a `Cell` or `RefCell` inside the `Rc`
+> https://doc.rust-lang.org/stable/std/rc/index.html
+
+ということで、 `Rc<RefCell<T>>` を使うことになる。
+
+`Value` の定義に `Array(Rc<RefCell<Vec<Value>>>),` という可能性を増やしてやればいい感じかな。
+
+えーと配列自体の pretty print は `(1, 2, 3, 4, 5, 6, 7, 8)` みたいにやるのね。
+
 ### Windows 対応
 
 Windows で走らせたらコケた。 `"\r\n"` 周りですね。ということで、 `\r` を whitespace 扱いにすることでとりあえず解決。
@@ -513,3 +534,6 @@ Windows で走らせたらコケた。 `"\r\n"` 周りですね。というこ�
 
 バグというわけではないけど、ループの中で return すべきなのに return せずに必ず None を返してる関数があったので、対処
 
+### 配列・参照 (part 2)
+
+とりあえず配列の読み書きは実装してテストを書いた。メソッドもどきはまだ。

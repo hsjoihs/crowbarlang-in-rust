@@ -18,4 +18,4 @@ test fizzbuzz
 test global_versus_local
 test2 ftest
 test test
-
+test arr_without_method
