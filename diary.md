@@ -390,3 +390,13 @@ ftest の方は `Invalid operation made using the operator` と書いてある�
 えーとあと落ちるのは……はいはい、 double の表示方法の差ね。C はデフォルトで 6 digits の precision で出力する。
 
 よし、テストケース通った！もうこれで ver 0.1 系は完了と言っても大丈夫だろう（フラグ）
+
+## 2022年7月19日 (Day 7)
+
+### Windows 対応
+
+Windows で走らせたらコケた。 `"\r\n"` 周りですね。ということで、 `\r` を whitespace 扱いにすることでとりあえず解決。
+
+### バグ修正
+
+バグというわけではないけど、ループの中で return すべきなのに return せずに必ず None を返してる関数があったので、対処
