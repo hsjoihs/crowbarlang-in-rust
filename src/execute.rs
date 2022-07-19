@@ -407,28 +407,52 @@ impl MutableEnvironment {
         }
     }
 
-    fn eval_assign_expression(&mut self, funcs: &[FuncDef], ident: &Ident, right: &Expr) -> Value {
+    fn eval_assign_expression(&mut self, funcs: &[FuncDef], left: &Expr, right: &Expr) -> Value {
         let v = self.eval_expression(funcs, right);
-        if self.search_local_variable_and_set(ident, &v).is_some()
-            || self
-                .search_global_variable_from_local_env_and_set(ident, &v)
-                .is_some()
-        {
-        } else if let Some(env) = &mut self.local_environment {
-            env.add_local_variable_and_set(ident, &v);
-        } else {
-            self.add_global_variable_and_set(ident, &v);
-        }
+        self.assign(funcs, left, &v);
         v
+    }
+
+    fn assign(&mut self, funcs: &[FuncDef], left: &Expr, v: &Value)  {
+        match left {
+            Expr::Identifier(ident) => {
+                if self.search_local_variable_and_set(ident, &v).is_some()
+                    || self
+                        .search_global_variable_from_local_env_and_set(ident, &v)
+                        .is_some()
+                {
+                } else if let Some(env) = &mut self.local_environment {
+                    env.add_local_variable_and_set(ident, &v);
+                } else {
+                    self.add_global_variable_and_set(ident, &v);
+                }
+            }
+            Expr::IndexAccess { array, index } => {
+                let array = self.eval_expression(funcs, array);
+                let index = self.eval_expression(funcs, index);
+
+                self.set_array_element(&array, &index, &v);
+            }
+            _ => {
+                self.throw_runtime_error("Type error: cannot assign to an expression that is not an lvalue")
+            }
+        }
+    }
+    fn set_array_element(&mut self, array: &Value, index: &Value, v: &Value) {
+        todo!()
     }
     fn eval_expression(&mut self, funcs: &[FuncDef], expr: &Expr) -> Value {
         match expr {
             Expr::IndexAccess { array, index } => todo!(),
-            Expr::MethodCall { receiver, method_name, args } => todo!(),
+            Expr::MethodCall {
+                receiver,
+                method_name,
+                args,
+            } => todo!(),
             Expr::Increment(expr) => todo!(),
             Expr::Decrement(expr) => todo!(),
             Expr::ArrayLiteral(exprs) => todo!(),
-            Expr::Assign(left, right) => todo!(), //self.eval_assign_expression(funcs, left, right),
+            Expr::Assign(left, right) => self.eval_assign_expression(funcs, left, right),
             Expr::LogicalOr(left, right) => {
                 let left_val = self.eval_expression(funcs, left);
                 match left_val {
