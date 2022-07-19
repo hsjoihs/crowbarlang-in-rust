@@ -609,6 +609,7 @@ impl MutableEnvironment {
             for lv in &mut env.local_variables {
                 if &lv.name == ident {
                     lv.value = value.clone();
+                    return Some(())
                 }
             }
             None

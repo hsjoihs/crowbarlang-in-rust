@@ -173,7 +173,7 @@ impl LexerState {
                             return self.get_token_raw(rest);
                         }
 
-                        if let Some(rest) = input.strip_prefix([' ', '\t']) {
+                        if let Some(rest) = input.strip_prefix([' ', '\t', '\r']) {
                             return self.get_token_raw(rest);
                         }
 
