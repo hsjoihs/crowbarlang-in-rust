@@ -458,7 +458,10 @@ impl MutableEnvironment {
                 let len = array.len();
                 if let Ok(index) = TryInto::<usize>::try_into(*index) {
                     match (*array).get_mut(index) {
-                        Some(lvalue) => { *lvalue = v; },
+                        Some(lvalue) => { 
+                            *lvalue = v;
+                            return;
+                        },
                         None => self.throw_runtime_error(
                             &format!("index out of bound: tried to access the index {} of an array of length {}", index, len)
                         ),
