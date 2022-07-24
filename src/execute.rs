@@ -623,7 +623,7 @@ impl MutableEnvironment {
                 _ => self
                     .throw_runtime_error("Incorrect number of arguments passed to method `resize`"),
             },
-            (Value::String(str), "length") => Value::Int(str.len().try_into().unwrap()),
+            (Value::String(str), "length") => Value::Int(str.chars().count().try_into().unwrap()),
             _ => self.throw_runtime_error(&format!(
                 "A method named `{}` does not exist",
                 method_name.name()
