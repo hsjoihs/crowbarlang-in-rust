@@ -451,10 +451,23 @@ impl MutableEnvironment {
             (Int(l), Double(r), _) => eval_binary_double(op, f64::from(l), r),
             (Double(l), Int(r), _) => eval_binary_double(op, l, f64::from(r)),
             (Boolean(l), Boolean(r), Eq(e)) => e.eval(&l, &r),
+            (Boolean(_), Boolean(_), op) => {
+                self.throw_runtime_error(RuntimeError::NotBooleanOperator {
+                    op: op.get_operator_string(),
+                })
+            }
             (String(l), r, BinOp::Add) => Value::String(format!("{}{}", l, r)),
             (String(l), String(r), BinOp::Cmp(c)) => c.eval(&l, &r),
             (String(l), String(r), BinOp::Eq(c)) => c.eval(&l, &r),
+            (String(_), String(_), op) => {
+                self.throw_runtime_error(RuntimeError::BadOperatorForString {
+                    op: op.get_operator_string(),
+                })
+            }
             (Null, Null, Eq(e)) => e.eval(&Null, &Null),
+            (Null, Null, op) => self.throw_runtime_error(RuntimeError::NotNullOperator {
+                op: op.get_operator_string(),
+            }),
             (Null, _, Eq(EqOp::Equal)) | (_, Null, Eq(EqOp::Equal)) => Value::Boolean(false),
             (Null, _, Eq(EqOp::NotEqual)) | (_, Null, Eq(EqOp::NotEqual)) => Value::Boolean(true),
             _ => self.throw_runtime_error(RuntimeError::BadOperandType {
@@ -902,7 +915,7 @@ impl MutableEnvironment {
         match operand_val {
             Value::Int(i) => Value::Int(-i),
             Value::Double(d) => Value::Double(-d),
-            _ => self.throw_runtime_error(RuntimeError::BadOperandType { op: "-" }),
+            _ => self.throw_runtime_error(RuntimeError::MinusOperandType),
         }
     }
     fn eval_expression_optional(
@@ -971,10 +984,16 @@ impl MutableEnvironment {
 
     fn execute_global_statement(&mut self, idents: &[Ident]) -> StatementResult {
         let result = StatementResult::Normal;
+        let global_variables = &self.global_variables;
         match &mut self.local_environment {
             None => self.throw_runtime_error(RuntimeError::GlobalStatementInToplevel),
             Some(env) => {
                 for ident in idents {
+                    if global_variables.iter().filter(|v| &v.name == ident).count() == 0 {
+                        self.throw_runtime_error(RuntimeError::GlobalVariableNotFound(
+                            ident.clone(),
+                        ))
+                    }
                     env.global_variables_visible_from_local.push(ident.clone());
                 }
             }

@@ -15,7 +15,11 @@ pub enum RuntimeError {
     FgetsArgumentType,
     FputsArgumentType,
     NotNullOperator { op: &'static str },
+
+	// reason: not used in the original implementation
+	#[allow(dead_code)]
     DivisionByZero,
+	
     GlobalVariableNotFound(Ident),
     GlobalStatementInToplevel,
     BadOperatorForString { op: &'static str },
@@ -28,7 +32,10 @@ pub enum RuntimeError {
     IncDecOperandType,
     ArrayResizeArgument,
     BadMultibyteCharacter,
-    UnexpectedWideString,
+
+	// reason: not used in the original implementation
+	#[allow(dead_code)]
+    UnexpectedWideString, 
 }
 
 impl fmt::Display for RuntimeError {
