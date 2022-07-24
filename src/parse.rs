@@ -39,6 +39,41 @@ pub enum Expr {
     ArrayLiteral(Vec<Expr>),
 }
 
+impl Expr {
+    #[must_use]
+    pub const fn get_operator_string(&self) -> Option<&'static str> {
+        match &self {
+            Expr::Assign(_, _) => Some("="),
+            Expr::Add(_, _) => Some("+"),
+            Expr::Sub(_, _) | Expr::Negative(_) => Some("-"),
+            Expr::Mul(_, _) => Some("*"),
+            Expr::Div(_, _) => Some("/"),
+            Expr::Mod(_, _) => Some("%"),
+            Expr::Equal(_, _) => Some("=="),
+            Expr::NotEqual(_, _) => Some("!="),
+            Expr::GreaterThan(_, _) => Some(">"),
+            Expr::GreaterThanOrEqual(_, _) => Some(">="),
+            Expr::LessThan(_, _) => Some("<"),
+            Expr::LessThanOrEqual(_, _) => Some("<="),
+            Expr::LogicalAnd(_, _) => Some("&&"),
+            Expr::LogicalOr(_, _) => Some("||"),
+            Expr::True
+            | Expr::False
+            | Expr::IntLiteral(_)
+            | Expr::DoubleLiteral(_)
+            | Expr::StringLiteral(_)
+            | Expr::Identifier(_)
+            | Expr::FunctionCall(_, _)
+            | Expr::MethodCall { .. }
+            | Expr::Null
+            | Expr::ArrayLiteral(_)
+            | Expr::IndexAccess { .. }
+            | Expr::Increment(_)
+            | Expr::Decrement(_) => None,
+        }
+    }
+}
+
 struct ParserState<'a> {
     tokvec: &'a [(Token, LineNumber)],
 }
