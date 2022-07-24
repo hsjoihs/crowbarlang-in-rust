@@ -6,6 +6,7 @@ use crate::parse::Block;
 use crate::parse::CrowbarFuncDef;
 use crate::parse::Expr;
 use crate::parse::Statement;
+use crate::runtime_error::RuntimeError;
 #[derive(PartialEq, Debug)]
 pub enum StatementResult {
     Normal,
@@ -376,6 +377,24 @@ enum BinOp {
     Cmp(CmpOp),
 }
 
+impl BinOp {
+    pub const fn get_operator_string(self) -> &'static str {
+        match self {
+            BinOp::Add => "+",
+            BinOp::Numerical(NumOp::Sub) => "-",
+            BinOp::Numerical(NumOp::Mul) => "*",
+            BinOp::Numerical(NumOp::Div) => "/",
+            BinOp::Numerical(NumOp::Mod) => "%",
+            BinOp::Eq(EqOp::Equal) => "==",
+            BinOp::Eq(EqOp::NotEqual) => "!=",
+            BinOp::Cmp(CmpOp::GreaterThan) => ">",
+            BinOp::Cmp(CmpOp::GreaterThanOrEqual) => ">=",
+            BinOp::Cmp(CmpOp::LessThan) => "<",
+            BinOp::Cmp(CmpOp::LessThanOrEqual) => "<=",
+        }
+    }
+}
+
 #[test]
 fn test_set_local_var() {
     let mut me = MutableEnvironment {
@@ -438,10 +457,9 @@ impl MutableEnvironment {
             (Null, Null, Eq(e)) => e.eval(&Null, &Null),
             (Null, _, Eq(EqOp::Equal)) | (_, Null, Eq(EqOp::Equal)) => Value::Boolean(false),
             (Null, _, Eq(EqOp::NotEqual)) | (_, Null, Eq(EqOp::NotEqual)) => Value::Boolean(true),
-            _ => self.throw_runtime_error(&format!(
-                "Invalid operation made using the operator `{:?}`",
-                op
-            )),
+            _ => self.throw_runtime_error(RuntimeError::BadOperandType {
+                op: op.get_operator_string(),
+            }),
         }
     }
 
@@ -469,7 +487,7 @@ impl MutableEnvironment {
                     self.set_array_element(&array, &index, new_val.clone());
                     new_val
                 } else {
-                    self.throw_runtime_error("cannot increment what is not an int")
+                    self.throw_runtime_error(RuntimeError::IncDecOperandType)
                 }
             }
             Expr::Identifier(ident) => {
@@ -479,10 +497,10 @@ impl MutableEnvironment {
                     self.assign(funcs, expr, new_val.clone());
                     new_val
                 } else {
-                    self.throw_runtime_error("cannot increment what is not an int")
+                    self.throw_runtime_error(RuntimeError::IncDecOperandType)
                 }
             }
-            _ => self.throw_runtime_error("cannot increment what is not an lvalue"),
+            _ => self.throw_runtime_error(RuntimeError::NotLvalue),
         }
     }
 
@@ -509,9 +527,7 @@ impl MutableEnvironment {
 
                 self.set_array_element(&array, &index, value);
             }
-            _ => self.throw_runtime_error(
-                "Type error: cannot assign to an expression that is not an lvalue",
-            ),
+            _ => self.throw_runtime_error(RuntimeError::NotLvalue),
         }
     }
 
@@ -520,25 +536,25 @@ impl MutableEnvironment {
             (Value::Array(array), Value::Int(index)) => {
                 let mut array = array.borrow_mut();
                 let len = array.len();
-                if let Ok(index) = TryInto::<usize>::try_into(*index) {
-                    match (*array).get_mut(index) {
+                if let Ok(index_) = TryInto::<usize>::try_into(*index) {
+                    match (*array).get_mut(index_) {
                         Some(lvalue) => {
                             *lvalue = v;
                             return;
-                        },
-                        None => self.throw_runtime_error(
-                            &format!("index out of bound: tried to access the index {} of an array of length {}", index, len)
-                        ),
+                        }
+                        None => self.throw_runtime_error(RuntimeError::ArrayIndexOutOfBounds {
+                            size: len,
+                            index: *index,
+                        }),
                     }
                 }
-                self.throw_runtime_error(&format!(
-                    "index out of bound: tried to access the index {} of an array of length {}",
-                    index, len
-                ))
+                self.throw_runtime_error(RuntimeError::ArrayIndexOutOfBounds {
+                    size: len,
+                    index: *index,
+                })
             }
-            (_, _) => self.throw_runtime_error(
-                "expected an array to be indexed and an integer to index the array, but didn't.",
-            ),
+            (Value::Array(_), _) => self.throw_runtime_error(RuntimeError::IndexOperandNotInt),
+            (_, _) => self.throw_runtime_error(RuntimeError::IndexOperandNotArray),
         }
     }
 
@@ -547,22 +563,24 @@ impl MutableEnvironment {
             (Value::Array(array), Value::Int(index)) => {
                 let array = array.borrow();
                 let len = array.len();
-                if let Ok(index) = TryInto::<usize>::try_into(*index) {
-                    match array.get(index) {
-                        Some(v) => {return v.clone();},
-                        None => self.throw_runtime_error(
-                            &format!("index out of bound: tried to access the index {} of an array of length {}", index, len)
-                        ),
+                if let Ok(index_) = TryInto::<usize>::try_into(*index) {
+                    match array.get(index_) {
+                        Some(v) => {
+                            return v.clone();
+                        }
+                        None => self.throw_runtime_error(RuntimeError::ArrayIndexOutOfBounds {
+                            size: len,
+                            index: *index,
+                        }),
                     }
                 }
-                self.throw_runtime_error(&format!(
-                    "index out of bound: tried to access the index {} of an array of length {}",
-                    index, len
-                ))
+                self.throw_runtime_error(RuntimeError::ArrayIndexOutOfBounds {
+                    size: len,
+                    index: *index,
+                })
             }
-            (_, _) => self.throw_runtime_error(
-                "expected an array to be indexed and an integer to index the array, but didn't.",
-            ),
+            (Value::Array(_), _) => self.throw_runtime_error(RuntimeError::IndexOperandNotInt),
+            (_, _) => self.throw_runtime_error(RuntimeError::IndexOperandNotArray),
         }
     }
 
@@ -597,14 +615,12 @@ impl MutableEnvironment {
                     arr.borrow_mut().push(v);
                     Value::Null
                 }
-                _ => {
-                    self.throw_runtime_error("Incorrect number of arguments passed to method `add`")
-                }
+                [] => self.throw_runtime_error(RuntimeError::ArgumentTooFew),
+                _ => self.throw_runtime_error(RuntimeError::ArgumentTooMany),
             },
             (Value::Array(arr), "size") => match args {
                 [] => Value::Int(arr.borrow().len().try_into().unwrap()),
-                _ => self
-                    .throw_runtime_error("Incorrect number of arguments passed to method `size`"),
+                _ => self.throw_runtime_error(RuntimeError::ArgumentTooMany),
             },
             (Value::Array(arr), "resize") => match args {
                 [expr] => {
@@ -614,20 +630,15 @@ impl MutableEnvironment {
                             let mut arr = arr.borrow_mut();
                             arr.resize(new_len.try_into().unwrap(), Value::Null);
                         }
-                        _ => self.throw_runtime_error(
-                            "type mismatch: the argument to .resize() must be an integer",
-                        ),
+                        _ => self.throw_runtime_error(RuntimeError::ArrayResizeArgument),
                     }
                     Value::Null
                 }
-                _ => self
-                    .throw_runtime_error("Incorrect number of arguments passed to method `resize`"),
+                [] => self.throw_runtime_error(RuntimeError::ArgumentTooFew),
+                _ => self.throw_runtime_error(RuntimeError::ArgumentTooMany),
             },
             (Value::String(str), "length") => Value::Int(str.chars().count().try_into().unwrap()),
-            _ => self.throw_runtime_error(&format!(
-                "A method named `{}` does not exist",
-                method_name.name()
-            )),
+            _ => self.throw_runtime_error(RuntimeError::NoSuchMethod(method_name.clone())),
         }
     }
 
@@ -646,33 +657,33 @@ impl MutableEnvironment {
             Expr::LogicalOr(left, right) => {
                 let left_val = self.eval_expression(funcs, left);
                 match left_val {
-                    Value::Boolean(true) =>{ Value::Boolean(true) },
-                    Value::Boolean(false) =>{
+                    Value::Boolean(true) => Value::Boolean(true),
+                    Value::Boolean(false) => {
                         let right_val = self.eval_expression(funcs, right);
                         match right_val {
                             a @ Value::Boolean(_) => a,
-                            _ => self.throw_runtime_error("expected a boolean type for the condition of the right side of `||`, but it was not."),
+                            _ => {
+                                self.throw_runtime_error(RuntimeError::BadOperandType { op: "||" })
+                            }
                         }
-                    },
-                    _ => self.throw_runtime_error(
-                    "expected a boolean type for the condition of the left side of `||`, but it was not.",
-                ),
+                    }
+                    _ => self.throw_runtime_error(RuntimeError::BadOperandType { op: "||" }),
                 }
             }
             Expr::LogicalAnd(left, right) => {
                 let left_val = self.eval_expression(funcs, left);
                 match left_val {
-                    Value::Boolean(false) =>{ Value::Boolean(false) },
-                    Value::Boolean(true) =>{
+                    Value::Boolean(false) => Value::Boolean(false),
+                    Value::Boolean(true) => {
                         let right_val = self.eval_expression(funcs, right);
                         match right_val {
                             a @ Value::Boolean(_) => a,
-                            _ => self.throw_runtime_error("expected a boolean type for the condition of the right side of `&&`, but it was not."),
+                            _ => {
+                                self.throw_runtime_error(RuntimeError::BadOperandType { op: "&&" })
+                            }
                         }
-                    },
-                    _ => self.throw_runtime_error(
-                    "expected a boolean type for the condition of the left side of `&&`, but it was not.",
-                ),
+                    }
+                    _ => self.throw_runtime_error(RuntimeError::BadOperandType { op: "&&" }),
                 }
             }
             Expr::Null => Value::Null,
@@ -778,7 +789,7 @@ impl MutableEnvironment {
         if let Some(var) = self.search_global_variable_from_local_env(ident) {
             return var.value;
         }
-        self.throw_runtime_error(&format!("Cannot find a variable named `{}`", ident.name()))
+        self.throw_runtime_error(RuntimeError::VariableNotFound(ident.clone()))
     }
 
     fn search_local_variable(&self, ident: &Ident) -> Option<Variable> {
@@ -835,7 +846,7 @@ impl MutableEnvironment {
                 }
             }
         }
-        self.throw_runtime_error(&format!("Cannot find a function named `{}`", ident.name()))
+        self.throw_runtime_error(RuntimeError::FunctionNotFound(ident.clone()))
     }
 
     fn call_crowbar_function(
@@ -845,27 +856,30 @@ impl MutableEnvironment {
         args: &[Expr],
     ) -> Value {
         let mut local_env = LocalEnvironment::default();
-        if f.params.len() != args.len() {
-            self.throw_runtime_error(&format!("Mismatch: the number of arguments passed is {} while the number of parameters is {}", args.len(), f.params.len()))
-        }
-        for (i, arg) in args.iter().enumerate() {
-            let arg_val = self.eval_expression(funcs, arg);
-            local_env.add_local_variable_and_set(&f.params[i], &arg_val);
-        }
+        match args.len().cmp(&f.params.len()) {
+            std::cmp::Ordering::Less => self.throw_runtime_error(RuntimeError::ArgumentTooFew),
+            std::cmp::Ordering::Greater => self.throw_runtime_error(RuntimeError::ArgumentTooMany),
+            std::cmp::Ordering::Equal => {
+                for (i, arg) in args.iter().enumerate() {
+                    let arg_val = self.eval_expression(funcs, arg);
+                    local_env.add_local_variable_and_set(&f.params[i], &arg_val);
+                }
 
-        let mut env = Some(local_env);
+                let mut env = Some(local_env);
 
-        // Store the current environment in env, so that we can restore it later
-        std::mem::swap(&mut env, &mut self.local_environment);
+                // Store the current environment in env, so that we can restore it later
+                std::mem::swap(&mut env, &mut self.local_environment);
 
-        let result = self.execute_statement_list(funcs, &f.block.0);
+                let result = self.execute_statement_list(funcs, &f.block.0);
 
-        // Restore the environment
-        std::mem::swap(&mut env, &mut self.local_environment);
+                // Restore the environment
+                std::mem::swap(&mut env, &mut self.local_environment);
 
-        match result {
-            StatementResult::Return(Some(value)) => value,
-            _ => Value::Null,
+                match result {
+                    StatementResult::Return(Some(value)) => value,
+                    _ => Value::Null,
+                }
+            }
         }
     }
 
@@ -888,9 +902,7 @@ impl MutableEnvironment {
         match operand_val {
             Value::Int(i) => Value::Int(-i),
             Value::Double(d) => Value::Double(-d),
-            _ => self.throw_runtime_error(
-                "Invalid type found as the operand of the unary minus operator",
-            ),
+            _ => self.throw_runtime_error(RuntimeError::BadOperandType { op: "-" }),
         }
     }
     fn eval_expression_optional(
@@ -960,7 +972,7 @@ impl MutableEnvironment {
     fn execute_global_statement(&mut self, idents: &[Ident]) -> StatementResult {
         let result = StatementResult::Normal;
         match &mut self.local_environment {
-            None => self.throw_runtime_error("`global` statement found in top-level"),
+            None => self.throw_runtime_error(RuntimeError::GlobalStatementInToplevel),
             Some(env) => {
                 for ident in idents {
                     env.global_variables_visible_from_local.push(ident.clone());
@@ -989,9 +1001,7 @@ impl MutableEnvironment {
                         return result;
                     }
                 }
-                _ => self.throw_runtime_error(
-                    "expected a boolean type for the condition of `while`, but it was not.",
-                ),
+                _ => self.throw_runtime_error(RuntimeError::NotBooleanType),
             }
         }
         result
@@ -1024,9 +1034,7 @@ impl MutableEnvironment {
             Value::Boolean(true) => {
                 result = self.execute_statement_list(funcs, &if_block.0);
             }
-            _ => self.throw_runtime_error(
-                "expected a boolean type for the condition of `if`, but it was not.",
-            ),
+            _ => self.throw_runtime_error(RuntimeError::NotBooleanType),
         }
         result
     }
@@ -1055,9 +1063,7 @@ impl MutableEnvironment {
                         _ => {}
                     }
                 }
-                _ => self.throw_runtime_error(
-                    "expected a boolean type for the condition of `while`, but it was not.",
-                ),
+                _ => self.throw_runtime_error(RuntimeError::NotBooleanType),
             }
         }
         result
@@ -1083,9 +1089,7 @@ impl MutableEnvironment {
                         break;
                     }
                     Value::Boolean(true) => {}
-                    _ => self.throw_runtime_error(
-                        "expected a boolean type for the condition of `for`, but it was not.",
-                    ),
+                    _ => self.throw_runtime_error(RuntimeError::NotBooleanType),
                 }
             }
             result = self.execute_statement_list(funcs, &block.0);
@@ -1106,7 +1110,7 @@ impl MutableEnvironment {
         result
     }
 
-    fn throw_runtime_error(&self, msg: &str) -> ! {
+    fn throw_runtime_error(&self, msg: RuntimeError) -> ! {
         panic!("Runtime error: {}", msg)
     }
 }

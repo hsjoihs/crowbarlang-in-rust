@@ -39,7 +39,7 @@ pub enum Expr {
     ArrayLiteral(Vec<Expr>),
 }
 
-impl Expr {
+/*impl Expr {
     #[must_use]
     pub const fn get_operator_string(&self) -> Option<&'static str> {
         match &self {
@@ -72,7 +72,7 @@ impl Expr {
             | Expr::Decrement(_) => None,
         }
     }
-}
+}*/
 
 struct ParserState<'a> {
     tokvec: &'a [(Token, LineNumber)],
