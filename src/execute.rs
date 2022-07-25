@@ -150,14 +150,8 @@ impl Interpreter {
             Box::new(|args, line_number| {
                 match args {
                     [arg] => print!("{}", arg),
-                    [] => MutableEnvironment::throw_runtime_error(
-                        line_number,
-                        RuntimeError::ArgumentTooFew,
-                    ),
-                    [_, _, ..] => MutableEnvironment::throw_runtime_error(
-                        line_number,
-                        RuntimeError::ArgumentTooMany,
-                    ),
+                    [] => RuntimeError::ArgumentTooFew.thrown_at(line_number),
+                    [_, _, ..] => RuntimeError::ArgumentTooMany.thrown_at(line_number),
                 };
                 Value::Null
             }),
@@ -172,18 +166,9 @@ impl Interpreter {
                     let fp = unsafe { libc::fopen(filename.as_ptr(), mode.as_ptr()) };
                     Value::NativePointer(NativePointer::FilePointer(FilePointer::RawPointer(fp)))
                 }
-                [_, _] => MutableEnvironment::throw_runtime_error(
-                    line_number,
-                    RuntimeError::FopenArgumentType,
-                ),
-                [] | [_] => MutableEnvironment::throw_runtime_error(
-                    line_number,
-                    RuntimeError::ArgumentTooFew,
-                ),
-                [_, _, _, ..] => MutableEnvironment::throw_runtime_error(
-                    line_number,
-                    RuntimeError::ArgumentTooMany,
-                ),
+                [_, _] => RuntimeError::FopenArgumentType.thrown_at(line_number),
+                [] | [_] => RuntimeError::ArgumentTooFew.thrown_at(line_number),
+                [_, _, _, ..] => RuntimeError::ArgumentTooMany.thrown_at(line_number),
             }),
         );
         self.add_native_function(
@@ -205,18 +190,9 @@ impl Interpreter {
                     }
                     Value::Null
                 }
-                [_] => MutableEnvironment::throw_runtime_error(
-                    line_number,
-                    RuntimeError::FcloseArgumentType,
-                ),
-                [] => MutableEnvironment::throw_runtime_error(
-                    line_number,
-                    RuntimeError::ArgumentTooFew,
-                ),
-                [_, _, ..] => MutableEnvironment::throw_runtime_error(
-                    line_number,
-                    RuntimeError::ArgumentTooMany,
-                ),
+                [_] => RuntimeError::FcloseArgumentType.thrown_at(line_number),
+                [] => RuntimeError::ArgumentTooFew.thrown_at(line_number),
+                [_, _, ..] => RuntimeError::ArgumentTooMany.thrown_at(line_number),
             }),
         );
 
@@ -252,10 +228,7 @@ impl Interpreter {
                                     Value::String(str.to_string())
                                 }
                             }
-                            Err(_) => MutableEnvironment::throw_runtime_error(
-                                line_number,
-                                RuntimeError::BadMultibyteCharacter,
-                            ),
+                            Err(_) => RuntimeError::BadMultibyteCharacter.thrown_at(line_number),
                         }
                     }
 
@@ -274,18 +247,9 @@ impl Interpreter {
                         }
                     }
                 },
-                [_] => MutableEnvironment::throw_runtime_error(
-                    line_number,
-                    RuntimeError::FgetsArgumentType,
-                ),
-                [] => MutableEnvironment::throw_runtime_error(
-                    line_number,
-                    RuntimeError::ArgumentTooFew,
-                ),
-                [_, _, ..] => MutableEnvironment::throw_runtime_error(
-                    line_number,
-                    RuntimeError::ArgumentTooMany,
-                ),
+                [_] => RuntimeError::FgetsArgumentType.thrown_at(line_number),
+                [] => RuntimeError::ArgumentTooFew.thrown_at(line_number),
+                [_, _, ..] => RuntimeError::ArgumentTooMany.thrown_at(line_number),
             }),
         );
 
@@ -313,9 +277,9 @@ impl Interpreter {
                     }
                     Value::Null
                 }
-                [_] => MutableEnvironment::throw_runtime_error(line_number, RuntimeError::FputsArgumentType),
-                [] => MutableEnvironment::throw_runtime_error(line_number, RuntimeError::ArgumentTooFew),
-                [_, _, ..] => MutableEnvironment::throw_runtime_error(line_number, RuntimeError::ArgumentTooMany),
+                [_] => RuntimeError::FputsArgumentType.thrown_at(line_number),
+                [] => RuntimeError::ArgumentTooFew.thrown_at(line_number),
+                [_, _, ..] => RuntimeError::ArgumentTooMany.thrown_at(line_number),
             }),
         );
 
@@ -323,10 +287,7 @@ impl Interpreter {
             "new_array",
             Box::new(|args, line_number| {
                 if let [] = args {
-                    MutableEnvironment::throw_runtime_error(
-                        line_number,
-                        RuntimeError::ArgumentTooFew,
-                    )
+                    RuntimeError::ArgumentTooFew.thrown_at(line_number)
                 } else {
                     let dimensions = args
                         .iter()
@@ -334,10 +295,7 @@ impl Interpreter {
                             Value::Int(len) => (*len)
                                 .try_into()
                                 .expect("The argument to new_array() is a negative integer"),
-                            _ => MutableEnvironment::throw_runtime_error(
-                                line_number,
-                                RuntimeError::NewArrayArgumentType,
-                            ),
+                            _ => RuntimeError::NewArrayArgumentType.thrown_at(line_number),
                         })
                         .collect::<Vec<usize>>();
                     new_array(&dimensions)
@@ -486,36 +444,28 @@ impl MutableEnvironment {
             (Int(l), Double(r), _) => eval_binary_double(op, f64::from(l), r),
             (Double(l), Int(r), _) => eval_binary_double(op, l, f64::from(r)),
             (Boolean(l), Boolean(r), Eq(e)) => e.eval(&l, &r),
-            (Boolean(_), Boolean(_), op) => Self::throw_runtime_error(
-                left.1,
-                RuntimeError::NotBooleanOperator {
-                    op: op.get_operator_string(),
-                },
-            ),
+            (Boolean(_), Boolean(_), op) => RuntimeError::NotBooleanOperator {
+                op: op.get_operator_string(),
+            }
+            .thrown_at(left.1),
             (String(l), r, BinOp::Add) => Value::String(format!("{}{}", l, r)),
             (String(l), String(r), BinOp::Cmp(c)) => c.eval(&l, &r),
             (String(l), String(r), BinOp::Eq(c)) => c.eval(&l, &r),
-            (String(_), String(_), op) => Self::throw_runtime_error(
-                left.1,
-                RuntimeError::BadOperatorForString {
-                    op: op.get_operator_string(),
-                },
-            ),
+            (String(_), String(_), op) => RuntimeError::BadOperatorForString {
+                op: op.get_operator_string(),
+            }
+            .thrown_at(left.1),
             (Null, Null, Eq(e)) => e.eval(&Null, &Null),
-            (Null, Null, op) => Self::throw_runtime_error(
-                left.1,
-                RuntimeError::NotNullOperator {
-                    op: op.get_operator_string(),
-                },
-            ),
+            (Null, Null, op) => RuntimeError::NotNullOperator {
+                op: op.get_operator_string(),
+            }
+            .thrown_at(left.1),
             (Null, _, Eq(EqOp::Equal)) | (_, Null, Eq(EqOp::Equal)) => Value::Boolean(false),
             (Null, _, Eq(EqOp::NotEqual)) | (_, Null, Eq(EqOp::NotEqual)) => Value::Boolean(true),
-            _ => Self::throw_runtime_error(
-                left.1,
-                RuntimeError::BadOperandType {
-                    op: op.get_operator_string(),
-                },
-            ),
+            _ => RuntimeError::BadOperandType {
+                op: op.get_operator_string(),
+            }
+            .thrown_at(left.1),
         }
     }
 
@@ -543,7 +493,7 @@ impl MutableEnvironment {
                     Self::set_array_element(&array, &index, new_val.clone(), expr.1);
                     new_val
                 } else {
-                    Self::throw_runtime_error(expr.1, RuntimeError::IncDecOperandType)
+                    RuntimeError::IncDecOperandType.thrown_at(expr.1)
                 }
             }
             Expr_::Identifier(ident) => {
@@ -553,10 +503,10 @@ impl MutableEnvironment {
                     self.assign(funcs, expr, new_val.clone());
                     new_val
                 } else {
-                    Self::throw_runtime_error(expr.1, RuntimeError::IncDecOperandType)
+                    RuntimeError::IncDecOperandType.thrown_at(expr.1)
                 }
             }
-            _ => Self::throw_runtime_error(expr.1, RuntimeError::NotLvalue),
+            _ => RuntimeError::NotLvalue.thrown_at(expr.1),
         }
     }
 
@@ -583,7 +533,7 @@ impl MutableEnvironment {
 
                 Self::set_array_element(&array, &index, value, left.1);
             }
-            _ => Self::throw_runtime_error(left.1, RuntimeError::NotLvalue),
+            _ => RuntimeError::NotLvalue.thrown_at(left.1),
         }
     }
 
@@ -598,27 +548,21 @@ impl MutableEnvironment {
                             *lvalue = v;
                             return;
                         }
-                        None => Self::throw_runtime_error(
-                            line_number,
-                            RuntimeError::ArrayIndexOutOfBounds {
-                                size: len,
-                                index: *index,
-                            },
-                        ),
+                        None => RuntimeError::ArrayIndexOutOfBounds {
+                            size: len,
+                            index: *index,
+                        }
+                        .thrown_at(line_number),
                     }
                 }
-                Self::throw_runtime_error(
-                    line_number,
-                    RuntimeError::ArrayIndexOutOfBounds {
-                        size: len,
-                        index: *index,
-                    },
-                )
+                RuntimeError::ArrayIndexOutOfBounds {
+                    size: len,
+                    index: *index,
+                }
+                .thrown_at(line_number)
             }
-            (Value::Array(_), _) => {
-                Self::throw_runtime_error(line_number, RuntimeError::IndexOperandNotInt)
-            }
-            (_, _) => Self::throw_runtime_error(line_number, RuntimeError::IndexOperandNotArray),
+            (Value::Array(_), _) => RuntimeError::IndexOperandNotInt.thrown_at(line_number),
+            (_, _) => RuntimeError::IndexOperandNotArray.thrown_at(line_number),
         }
     }
 
@@ -632,27 +576,21 @@ impl MutableEnvironment {
                         Some(v) => {
                             return v.clone();
                         }
-                        None => Self::throw_runtime_error(
-                            line_number,
-                            RuntimeError::ArrayIndexOutOfBounds {
-                                size: len,
-                                index: *index,
-                            },
-                        ),
+                        None => RuntimeError::ArrayIndexOutOfBounds {
+                            size: len,
+                            index: *index,
+                        }
+                        .thrown_at(line_number),
                     }
                 }
-                Self::throw_runtime_error(
-                    line_number,
-                    RuntimeError::ArrayIndexOutOfBounds {
-                        size: len,
-                        index: *index,
-                    },
-                )
+                RuntimeError::ArrayIndexOutOfBounds {
+                    size: len,
+                    index: *index,
+                }
+                .thrown_at(line_number)
             }
-            (Value::Array(_), _) => {
-                Self::throw_runtime_error(line_number, RuntimeError::IndexOperandNotInt)
-            }
-            (_, _) => Self::throw_runtime_error(line_number, RuntimeError::IndexOperandNotArray),
+            (Value::Array(_), _) => RuntimeError::IndexOperandNotInt.thrown_at(line_number),
+            (_, _) => RuntimeError::IndexOperandNotArray.thrown_at(line_number),
         }
     }
 
@@ -694,12 +632,12 @@ impl MutableEnvironment {
                     arr.borrow_mut().push(v);
                     Value::Null
                 }
-                [] => Self::throw_runtime_error(line_number, RuntimeError::ArgumentTooFew),
-                _ => Self::throw_runtime_error(line_number, RuntimeError::ArgumentTooMany),
+                [] => RuntimeError::ArgumentTooFew.thrown_at(line_number),
+                _ => RuntimeError::ArgumentTooMany.thrown_at(line_number),
             },
             (Value::Array(arr), "size") => match args {
                 [] => Value::Int(arr.borrow().len().try_into().unwrap()),
-                _ => Self::throw_runtime_error(line_number, RuntimeError::ArgumentTooMany),
+                _ => RuntimeError::ArgumentTooMany.thrown_at(line_number),
             },
             (Value::Array(arr), "resize") => match args {
                 [expr] => {
@@ -709,21 +647,15 @@ impl MutableEnvironment {
                             let mut arr = arr.borrow_mut();
                             arr.resize(new_len.try_into().unwrap(), Value::Null);
                         }
-                        _ => Self::throw_runtime_error(
-                            line_number,
-                            RuntimeError::ArrayResizeArgument,
-                        ),
+                        _ => RuntimeError::ArrayResizeArgument.thrown_at(line_number),
                     }
                     Value::Null
                 }
-                [] => Self::throw_runtime_error(line_number, RuntimeError::ArgumentTooFew),
-                _ => Self::throw_runtime_error(line_number, RuntimeError::ArgumentTooMany),
+                [] => RuntimeError::ArgumentTooFew.thrown_at(line_number),
+                _ => RuntimeError::ArgumentTooMany.thrown_at(line_number),
             },
             (Value::String(str), "length") => Value::Int(str.chars().count().try_into().unwrap()),
-            _ => Self::throw_runtime_error(
-                line_number,
-                RuntimeError::NoSuchMethod(method_name.clone()),
-            ),
+            _ => RuntimeError::NoSuchMethod(method_name.clone()).thrown_at(line_number),
         }
     }
 
@@ -749,15 +681,10 @@ impl MutableEnvironment {
                         let right_val = self.eval_expression(funcs, right);
                         match right_val {
                             a @ Value::Boolean(_) => a,
-                            _ => Self::throw_runtime_error(
-                                left.1,
-                                RuntimeError::BadOperandType { op: "||" },
-                            ),
+                            _ => RuntimeError::BadOperandType { op: "||" }.thrown_at(left.1),
                         }
                     }
-                    _ => {
-                        Self::throw_runtime_error(left.1, RuntimeError::BadOperandType { op: "||" })
-                    }
+                    _ => RuntimeError::BadOperandType { op: "||" }.thrown_at(left.1),
                 }
             }
             Expr_::LogicalAnd(left, right) => {
@@ -768,15 +695,10 @@ impl MutableEnvironment {
                         let right_val = self.eval_expression(funcs, right);
                         match right_val {
                             a @ Value::Boolean(_) => a,
-                            _ => Self::throw_runtime_error(
-                                left.1,
-                                RuntimeError::BadOperandType { op: "&&" },
-                            ),
+                            _ => RuntimeError::BadOperandType { op: "&&" }.thrown_at(left.1),
                         }
                     }
-                    _ => {
-                        Self::throw_runtime_error(left.1, RuntimeError::BadOperandType { op: "&&" })
-                    }
+                    _ => RuntimeError::BadOperandType { op: "&&" }.thrown_at(left.1),
                 }
             }
             Expr_::Null => Value::Null,
@@ -884,7 +806,7 @@ impl MutableEnvironment {
         if let Some(var) = self.search_global_variable_from_local_env(ident) {
             return var.value;
         }
-        Self::throw_runtime_error(line_number, RuntimeError::VariableNotFound(ident.clone()))
+        RuntimeError::VariableNotFound(ident.clone()).thrown_at(line_number)
     }
 
     fn search_local_variable(&self, ident: &Ident) -> Option<Variable> {
@@ -942,7 +864,7 @@ impl MutableEnvironment {
                 }
             }
         }
-        Self::throw_runtime_error(line_number, RuntimeError::FunctionNotFound(ident.clone()))
+        RuntimeError::FunctionNotFound(ident.clone()).thrown_at(line_number)
     }
 
     fn call_crowbar_function(
@@ -954,12 +876,8 @@ impl MutableEnvironment {
     ) -> Value {
         let mut local_env = LocalEnvironment::default();
         match args.len().cmp(&f.params.len()) {
-            std::cmp::Ordering::Less => {
-                Self::throw_runtime_error(line_number, RuntimeError::ArgumentTooFew)
-            }
-            std::cmp::Ordering::Greater => {
-                Self::throw_runtime_error(line_number, RuntimeError::ArgumentTooMany)
-            }
+            std::cmp::Ordering::Less => RuntimeError::ArgumentTooFew.thrown_at(line_number),
+            std::cmp::Ordering::Greater => RuntimeError::ArgumentTooMany.thrown_at(line_number),
             std::cmp::Ordering::Equal => {
                 for (i, arg) in args.iter().enumerate() {
                     let arg_val = self.eval_expression(funcs, arg);
@@ -1004,7 +922,7 @@ impl MutableEnvironment {
         match operand_val {
             Value::Int(i) => Value::Int(-i),
             Value::Double(d) => Value::Double(-d),
-            _ => Self::throw_runtime_error(expr.1, RuntimeError::MinusOperandType),
+            _ => RuntimeError::MinusOperandType.thrown_at(expr.1),
         }
     }
     fn eval_expression_optional(
@@ -1079,14 +997,11 @@ impl MutableEnvironment {
         let result = StatementResult::Normal;
         let global_variables = &self.global_variables;
         match &mut self.local_environment {
-            None => Self::throw_runtime_error(line_number, RuntimeError::GlobalStatementInToplevel),
+            None => RuntimeError::GlobalStatementInToplevel.thrown_at(line_number),
             Some(env) => {
                 for ident in idents {
                     if global_variables.iter().filter(|v| &v.name == ident).count() == 0 {
-                        Self::throw_runtime_error(
-                            line_number,
-                            RuntimeError::GlobalVariableNotFound(ident.clone()),
-                        )
+                        RuntimeError::GlobalVariableNotFound(ident.clone()).thrown_at(line_number)
                     }
                     env.global_variables_visible_from_local.push(ident.clone());
                 }
@@ -1114,7 +1029,7 @@ impl MutableEnvironment {
                         return result;
                     }
                 }
-                _ => Self::throw_runtime_error(elsif.0 .1, RuntimeError::NotBooleanType),
+                _ => RuntimeError::NotBooleanType.thrown_at(elsif.0 .1),
             }
         }
         result
@@ -1147,7 +1062,7 @@ impl MutableEnvironment {
             Value::Boolean(true) => {
                 result = self.execute_statement_list(funcs, &if_block.0);
             }
-            _ => Self::throw_runtime_error(if_expr.1, RuntimeError::NotBooleanType),
+            _ => RuntimeError::NotBooleanType.thrown_at(if_expr.1),
         }
         result
     }
@@ -1176,7 +1091,7 @@ impl MutableEnvironment {
                         _ => {}
                     }
                 }
-                _ => Self::throw_runtime_error(expr.1, RuntimeError::NotBooleanType),
+                _ => RuntimeError::NotBooleanType.thrown_at(expr.1),
             }
         }
         result
@@ -1202,7 +1117,7 @@ impl MutableEnvironment {
                         break;
                     }
                     Value::Boolean(true) => {}
-                    _ => Self::throw_runtime_error(cond_expr.1, RuntimeError::NotBooleanType),
+                    _ => RuntimeError::NotBooleanType.thrown_at(cond_expr.1),
                 }
             }
             result = self.execute_statement_list(funcs, &block.0);
@@ -1221,10 +1136,6 @@ impl MutableEnvironment {
             }
         }
         result
-    }
-
-    fn throw_runtime_error(line_number: LineNumber, msg: RuntimeError) -> ! {
-        panic!("{:>3}:{}", line_number.0, msg)
     }
 }
 

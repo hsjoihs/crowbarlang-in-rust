@@ -1,4 +1,4 @@
-use crate::lex::Ident;
+use crate::lex::{Ident, LineNumber};
 use std::fmt;
 
 pub enum RuntimeError {
@@ -8,34 +8,51 @@ pub enum RuntimeError {
     ArgumentTooFew,
     NotBooleanType,
     MinusOperandType,
-    BadOperandType { op: &'static str },
-    NotBooleanOperator { op: &'static str },
+    BadOperandType {
+        op: &'static str,
+    },
+    NotBooleanOperator {
+        op: &'static str,
+    },
     FopenArgumentType,
     FcloseArgumentType,
     FgetsArgumentType,
     FputsArgumentType,
-    NotNullOperator { op: &'static str },
+    NotNullOperator {
+        op: &'static str,
+    },
 
-	// reason: not used in the original implementation
-	#[allow(dead_code)]
+    // reason: not used in the original implementation
+    #[allow(dead_code)]
     DivisionByZero,
-	
+
     GlobalVariableNotFound(Ident),
     GlobalStatementInToplevel,
-    BadOperatorForString { op: &'static str },
+    BadOperatorForString {
+        op: &'static str,
+    },
     NotLvalue,
     IndexOperandNotArray,
     IndexOperandNotInt,
-    ArrayIndexOutOfBounds { size: usize, index: i32 },
+    ArrayIndexOutOfBounds {
+        size: usize,
+        index: i32,
+    },
     NoSuchMethod(Ident),
     NewArrayArgumentType,
     IncDecOperandType,
     ArrayResizeArgument,
     BadMultibyteCharacter,
 
-	// reason: not used in the original implementation
-	#[allow(dead_code)]
-    UnexpectedWideString, 
+    // reason: not used in the original implementation
+    #[allow(dead_code)]
+    UnexpectedWideString,
+}
+
+impl RuntimeError {
+    pub fn thrown_at(&self, line_number: LineNumber) -> ! {
+        panic!("{:>3}:{}", line_number.0, &self)
+    }
 }
 
 impl fmt::Display for RuntimeError {

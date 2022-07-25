@@ -530,7 +530,7 @@ impl<'a> ParserState<'a> {
         // First, try parsing a postfix expression and see if we get a Token::Assign
         let mut new_parser = ParserState {
             tokvec: self.tokvec,
-            line_number: self.line_number
+            line_number: self.line_number,
         };
         let expr = new_parser.parse_postfix_expression();
         if matches!(new_parser.tokvec.get(0), Some((Token::Assign, _))) {

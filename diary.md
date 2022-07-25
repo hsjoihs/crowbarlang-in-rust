@@ -631,3 +631,7 @@ Rust で実装しており、全てを UTF-8 で動かしているという事�
 tests.rs は一旦消して、実行すると、はいちゃんとテストが全て通る。
 
 ネイティブ関数内でもちゃんとエラーを投げるようにする。
+
+しかし、実行時エラーを投げるときの関数が `MutableEnvironment::throw_runtime_error(line_number, RuntimeError::ほにゃらら)` なの気に入らないな。`RuntimeError::ほにゃらら.thrown_at(line_number)` にしたい。しよう。
+
+変更した。
